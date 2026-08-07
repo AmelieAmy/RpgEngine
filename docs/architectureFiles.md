@@ -1,0 +1,70 @@
+```
+RPGEngine
+.idea
+.mvn
+docs
+RPGEngine
+src
+    main
+        java
+            fr.doryamy
+                rpgengine
+                    action
+                        assignment
+                            Assignment.java
+                            AssignmentExecutor.java
+                            AssignmentOperator.java
+                            AssignmentParser.java
+                        executors
+                            MessageActionExecutor.java
+                            PlayerVariableActionExecutor.java
+                        ActionExecutor.java
+                        ActionManager.java
+                    condition
+                        expression
+                            ComparisonOperator.java
+                            Expression.java
+                            ExpressionEvaluator.java
+                            ExpressionParser.java
+                        providers
+                            PlayerConditionProvider.java
+                        ConditionManager.java
+                        ConditionProvider.java
+                    database
+                        migrations
+                            Migration.java
+                            V1_init.java
+                            V2_ActionSystem.java
+                            V3_ConditionSystem.java
+                            V4_PlayerVariables.java
+                            V5_RenameConditionTypeAndValue.java
+                            V6_RenameActionTypeAndValue.java
+                        DatabaseManager.java
+                        MigrationManager.java
+                    listener
+                        NPCListener.java
+                    model
+                        Action.java
+                        Condition.java
+                        Trigger.java
+                        TriggerType.java
+                    repository
+                        ActionRepository.java
+                        ConditionRepository.java
+                        PlayerVariableRepository.java
+                        TriggerRepository.java
+                    trigger
+                        TriggerContext.java
+                        TriggerManager.java
+                    util
+                        RpgLogger.java
+                    RpgEngine.java
+                Main.java
+        resources
+            config.yml
+            plugin.yml
+    test
+target
+.gitignore
+pom.xml
+```

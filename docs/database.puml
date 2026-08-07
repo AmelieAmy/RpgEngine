@@ -1,0 +1,75 @@
+@startuml RPGEngine Database
+
+title RPGEngine - Modèle de données SQLite
+
+hide methods
+hide stereotypes
+
+skinparam linetype ortho
+
+entity "trigger" as trigger {
+    * id : INTEGER <<PK>>
+    --
+    name : TEXT
+    type : TEXT
+    target_id : TEXT
+    enabled : INTEGER
+}
+
+entity "condition" as condition {
+    * id : INTEGER <<PK>>
+    --
+    trigger_id : INTEGER <<FK>>
+    provider : TEXT
+    expression : TEXT
+}
+
+entity "action" as action {
+    * id : INTEGER <<PK>>
+    --
+    trigger_id : INTEGER <<FK>>
+    provider : TEXT
+    expression : TEXT
+    position : INTEGER
+}
+
+entity "player_variable" as player_variable {
+    * id : INTEGER <<PK>>
+    --
+    player_uuid : TEXT
+    key : TEXT
+    value : TEXT
+}
+
+entity "schema_version" as schema_version {
+    version : INTEGER
+}
+
+
+trigger ||--o{ condition : possède
+trigger ||--o{ action : possède
+
+
+note right of trigger
+  target_id identifie la cible métier.
+
+  Exemples :
+  NPC -> "210"
+  REGION -> "village_center"
+
+  Il ne s'agit pas d'une clé étrangère.
+end note
+
+
+note bottom of player_variable
+  Contrainte UNIQUE :
+  (player_uuid, key)
+end note
+
+
+note right of schema_version
+  Version actuelle
+  du schéma SQLite.
+end note
+
+@enduml
