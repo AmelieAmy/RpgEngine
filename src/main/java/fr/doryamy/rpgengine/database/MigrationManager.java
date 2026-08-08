@@ -23,7 +23,8 @@ public final class MigrationManager {
                 new V3_ConditionSystem(),
                 new V4_PlayerVariables(),
                 new V5_RenameConditionTypeAndValue(),
-                new V6_RenameActionTypeAndValue()
+                new V6_RenameActionTypeAndValue(),
+                new V7_DialogSystem()
         );
     }
 

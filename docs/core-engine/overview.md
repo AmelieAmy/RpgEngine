@@ -221,12 +221,18 @@ Le moteur est entièrement piloté par les données.
 Les principales tables sont :
 
 ```text
-trigger
-    │
-    ├── condition
-    └── action
-
-player_variable
+SQLite
+  │
+  ├── trigger
+  │      ├── condition
+  │      └── action
+  │
+  ├── player_variable
+  │
+  ├── dialogue
+  │      └── dialogue_line
+  │
+  └── schema_version
 ```
 
 Le fonctionnement détaillé est décrit dans **database.md**.

@@ -365,6 +365,31 @@ Cette évolution accompagne l'introduction du système générique d'`ActionExec
 
 ---
 
+## V7 - Système de dialogues
+
+Classe :
+
+```text
+V7_DialogSystem
+```
+
+Cette migration introduit les tables :
+
+```text
+dialogue
+dialogue_line
+```
+
+Elle permet aux actions du moteur de référencer des dialogues persistants grâce au provider :
+
+```text
+DIALOG
+```
+
+Le système de dialogues devient ainsi une extension naturelle du système d'actions sans modifier le cœur de RPGEngine.
+
+---
+
 # Modèle relationnel actuel
 
 La base métier est organisée autour de quatre tables principales :
@@ -739,6 +764,70 @@ Trigger
           ├── MESSAGE
           ├── MESSAGE
           └── PLAYER
+```
+
+---
+
+# Système de dialogues
+
+Le système de dialogues utilise deux tables :
+
+```
+dialogue
+   │
+   ▼
+dialogue_line
+```
+
+Un dialogue représente une ressource narrative identifiable par une clé métier.
+
+Ses lignes sont stockées séparément afin de préserver leur ordre et de permettre l'évolution future du système.
+
+# Table dialogue
+
+| Colonne       | Type    | Rôle                    |
+|---------------| ------- |-------------------------|
+| `id`          | INTEGER | Identifiant interne     |
+| `key`         | TEXT    | Clé métier unique       |
+| `name`        | TEXT    | Nom lisible du dialogue |
+
+Exemple :
+
+```
+provider = DIALOG
+
+expression = chief_intro
+```
+
+# Table dialogue_line
+
+| Colonne       | Type     | Rôle                    |
+|---------------|----------|-------------------------|
+| `id`          | INTEGER  | Identifiant interne     |
+| `dialogue_id` | INTEGER  | Dialogue propriétaire   |
+| `position`    | INTEGER  | Ordre d'affichage       |
+| `text`        | TEXT     | Texte de la ligne       |
+
+Relation :
+
+```
+dialogue_line.dialogue_id
+     │
+     ▼
+dialogue.id
+```
+
+La combinaison (dialogue_id, position) est unique. Ainsi, deux lignes d'un même dialogue ne peuvent pas occuper la même position.
+
+La suppression d'un dialogue entraîne également la suppression de ses lignes grâce à la relation ON DELETE CASCADE.
+
+Exemple :
+
+```
+chief_intro
+
+1 → Bienvenue aventurier ! 
+2 → Une grande aventure commence...
 ```
 
 ---

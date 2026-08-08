@@ -15,7 +15,12 @@ src
                             AssignmentExecutor.java
                             AssignmentOperator.java
                             AssignmentParser.java
+                        command
+                            CommandManager.java
+                            RpgCommand.java
+                            RpgSubcommand.java
                         executors
+                            DialogActionExecutor.java
                             MessageActionExecutor.java
                             PlayerVariableActionExecutor.java
                         ActionExecutor.java
@@ -39,8 +44,17 @@ src
                             V4_PlayerVariables.java
                             V5_RenameConditionTypeAndValue.java
                             V6_RenameActionTypeAndValue.java
+                            V7_DialogSystem.java
                         DatabaseManager.java
                         MigrationManager.java
+                    dialogue
+                        command
+                            CreateDialogueCommand.java
+                            ListDialogueCommand.java
+                        Dialogue.java
+                        DialogueLine.java
+                        DialogueRepository.java
+                        DialogueService.java
                     listener
                         NPCListener.java
                     model

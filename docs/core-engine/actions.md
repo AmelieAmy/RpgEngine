@@ -130,7 +130,7 @@ Exemple :
 ```
 provider = PLAYER
 
-expression = gold+=10
+expression = popularity+=10
 ```
 
 Cette action :
@@ -139,6 +139,54 @@ Cette action :
 * lit la valeur actuelle ;
 * calcule la nouvelle valeur ;
 * sauvegarde le résultat.
+
+---
+
+## DIALOG
+
+Le provider `DIALOG` affiche un dialogue stocké dans la base de données.
+
+L'expression de l'action contient la clé métier du dialogue à afficher.
+
+Exemple :
+
+```
+provider = DIALOG
+
+expression = chief_intro
+```
+
+Le traitement est :
+
+```
+Action 
+   │ 
+   ▼ 
+DialogActionExecutor
+   │ 
+   ▼ 
+DialogueRepository
+   │ 
+   ▼ 
+Dialogue 
+   │ 
+   ▼ 
+Lignes ordonnées 
+   │ 
+   ▼ 
+Affichage au joueur
+```
+Le contenu du dialogue n'est donc pas stocké directement dans l'action.
+
+L'action référence uniquement un dialogue par sa clé.
+
+Cette séparation permet de réutiliser un même dialogue depuis plusieurs règles et de faire évoluer le système de dialogues sans modifier le système d'actions.
+
+Un dialogue inexistant constitue une erreur de configuration et est signalé dans les logs.
+
+Un dialogue existant mais ne contenant aucune ligne produit un avertissement.
+
+Seul le contenu narratif est envoyé au joueur.
 
 ---
 

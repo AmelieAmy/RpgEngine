@@ -6,3 +6,14 @@ author: DoryAmy
 
 depend:
   - Citizens
+
+commands:
+  rpg:
+    description: Commande principale de RPGEngine
+    usage: /rpg
+    permission: rpg.admin
+
+permissions:
+  rpg.admin:
+    description: Administration de RPGEngine
+    default: op
