@@ -10,17 +10,21 @@ import org.bukkit.entity.Player;
 import java.util.Optional;
 
 /**
- * Joue un dialogue pour le joueur ayant exécuté la commande.
+ * Prévisualise le node de départ d'un dialogue pour le joueur ayant exécuté la commande.
+ *
+ * Cette commande est destinée à l'administration.
+ * Elle ne crée aucune DialogueSession et n'exécute ni conditions ni actions.
  *
  * Syntaxe :
- * /rpg dialog play <key>
+ * /rpg dialog preview <key>
  */
-public final class PlayDialogueCommand implements RpgSubcommand {
+public final class PreviewDialogueCommand
+        implements RpgSubcommand {
 
     private final DialogueService dialogueService;
     private final DialogueRunner dialogueRunner;
 
-    public PlayDialogueCommand(
+    public PreviewDialogueCommand(
             DialogueService dialogueService,
             DialogueRunner dialogueRunner
     ) {
@@ -30,7 +34,7 @@ public final class PlayDialogueCommand implements RpgSubcommand {
 
     @Override
     public String getPath() {
-        return "dialog play";
+        return "dialog preview";
     }
 
     @Override
@@ -42,15 +46,13 @@ public final class PlayDialogueCommand implements RpgSubcommand {
             sender.sendMessage(
                     "Cette commande doit être exécutée par un joueur."
             );
-
             return false;
         }
 
         if (args.length != 1) {
             sender.sendMessage(
-                    "Usage : /rpg dialog play <key>"
+                    "Usage : /rpg dialog preview <key>"
             );
-
             return false;
         }
 
@@ -61,14 +63,12 @@ public final class PlayDialogueCommand implements RpgSubcommand {
 
         if (result.isEmpty()) {
             sender.sendMessage(
-                    "Dialogue introuvable : "
-                            + key
+                    "Dialogue introuvable : " + key
             );
-
             return false;
         }
 
-        dialogueRunner.play(
+        dialogueRunner.preview(
                 player,
                 result.get()
         );

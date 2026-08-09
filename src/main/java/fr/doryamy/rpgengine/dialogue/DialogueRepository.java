@@ -1,25 +1,26 @@
 package fr.doryamy.rpgengine.dialogue;
 
+import fr.doryamy.rpgengine.model.Action;
+import fr.doryamy.rpgengine.model.Condition;
 import fr.doryamy.rpgengine.util.RpgLogger;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.sql.*;
+import java.util.*;
 
 /**
  * Repository chargé de la persistance
  * des dialogues de RPGEngine.
  *
- * Cette classe est responsable uniquement
- * des opérations SQL liées aux dialogues
- * et à leurs lignes.
+ * Un dialogue est manipulé comme un agrégat complet :
  *
- * Elle ne contient aucune logique métier
- * d'administration ou d'affichage.
+ * - métadonnées ;
+ * - nodes ;
+ * - transitions ;
+ * - conditions des transitions ;
+ * - actions des transitions.
+ *
+ * Le repository ne contient aucune logique métier
+ * d'édition ou d'exécution.
  */
 public final class DialogueRepository {
 
@@ -30,7 +31,9 @@ public final class DialogueRepository {
      *
      * @param connection connexion SQLite
      */
-    public DialogueRepository(Connection connection) {
+    public DialogueRepository(
+            Connection connection
+    ) {
         this.connection = connection;
     }
 
@@ -39,75 +42,77 @@ public final class DialogueRepository {
      * de sa clé métier.
      *
      * @param key clé du dialogue
-     * @return dialogue correspondant s'il existe
+     * @return dialogue complet s'il existe
      */
-    public Optional<Dialogue> findByKey(String key) {
-
+    public Optional<Dialogue> findByKey(
+            String key
+    ) {
         String sql = """
                 SELECT
-                    d.id AS dialogue_id,
-                    d.key AS dialogue_key,
-                    d.name AS dialogue_name,
-                    dl.position,
-                    dl.text
+                    d.id,
+                    d.key,
+                    d.name,
+                    start_node.key AS start_node_key
                 FROM dialogue d
-                LEFT JOIN dialogue_line dl
-                    ON dl.dialogue_id = d.id
+                LEFT JOIN dialogue_node start_node
+                    ON start_node.id = d.start_node_id
                 WHERE d.key = ?
-                ORDER BY dl.position
                 """;
 
         try (
                 PreparedStatement statement =
                         connection.prepareStatement(sql)
         ) {
-            statement.setString(1, key);
+            statement.setString(
+                    1,
+                    key
+            );
 
-            try (ResultSet result = statement.executeQuery()) {
-
+            try (
+                    ResultSet result =
+                            statement.executeQuery()
+            ) {
                 if (!result.next()) {
                     return Optional.empty();
                 }
 
+                long dialogueId =
+                        result.getLong("id");
+
                 String dialogueKey =
-                        result.getString("dialogue_key");
+                        result.getString("key");
 
                 String dialogueName =
-                        result.getString("dialogue_name");
+                        result.getString("name");
 
-                List<DialogueLine> lines =
-                        new ArrayList<>();
+                String startNodeKey =
+                        result.getString("start_node_key");
 
-                do {
-                    String text =
-                            result.getString("text");
-
-                    /*
-                     * Le LEFT JOIN permet à un dialogue
-                     * d'exister sans contenir encore de ligne.
-                     */
-                    if (text != null) {
-                        lines.add(
-                                new DialogueLine(
-                                        result.getInt("position"),
-                                        text
-                                )
+                List<DialogueNode> nodes =
+                        loadNodes(
+                                dialogueId
                         );
-                    }
 
-                } while (result.next());
+                List<DialogueTransition> transitions =
+                        loadTransitions(
+                                dialogueId
+                        );
 
                 return Optional.of(
                         new Dialogue(
                                 dialogueKey,
                                 dialogueName,
-                                lines
+                                startNodeKey,
+                                nodes,
+                                transitions
                         )
                 );
             }
 
-        } catch (SQLException e) {
-
+        } catch (
+                SQLException
+                | IllegalArgumentException e
+        ) {
             RpgLogger.error(
                     "Impossible de charger le dialogue '"
                             + key
@@ -165,11 +170,12 @@ public final class DialogueRepository {
     /**
      * Vérifie l'existence d'un dialogue.
      *
-     * @param key clé du dialogue
+     * @param key clé métier
      * @return true si le dialogue existe
      */
-    public boolean exists(String key) {
-
+    public boolean exists(
+            String key
+    ) {
         String sql = """
                 SELECT 1
                 FROM dialogue
@@ -181,16 +187,22 @@ public final class DialogueRepository {
                 PreparedStatement statement =
                         connection.prepareStatement(sql)
         ) {
-            statement.setString(1, key);
+            statement.setString(
+                    1,
+                    key
+            );
 
-            try (ResultSet result = statement.executeQuery()) {
+            try (
+                    ResultSet result =
+                            statement.executeQuery()
+            ) {
                 return result.next();
             }
 
         } catch (SQLException e) {
 
             RpgLogger.error(
-                    "Impossible de vérifier le dialogue '"
+                    "Impossible de vérifier l'existence du dialogue '"
                             + key
                             + "' : "
                             + e.getMessage()
@@ -201,7 +213,10 @@ public final class DialogueRepository {
     }
 
     /**
-     * Crée un dialogue.
+     * Crée un dialogue vide.
+     *
+     * Aucun node de départ n'est défini
+     * lors de la création.
      *
      * @param key clé métier
      * @param name nom lisible
@@ -211,21 +226,28 @@ public final class DialogueRepository {
             String key,
             String name
     ) {
-
         String sql = """
                 INSERT INTO dialogue (
                     key,
-                    name
+                    name,
+                    start_node_id
                 )
-                VALUES (?, ?)
+                VALUES (?, ?, NULL)
                 """;
 
         try (
                 PreparedStatement statement =
                         connection.prepareStatement(sql)
         ) {
-            statement.setString(1, key);
-            statement.setString(2, name);
+            statement.setString(
+                    1,
+                    key
+            );
+
+            statement.setString(
+                    2,
+                    name
+            );
 
             return statement.executeUpdate() == 1;
 
@@ -245,14 +267,16 @@ public final class DialogueRepository {
     /**
      * Supprime un dialogue.
      *
-     * Ses lignes sont supprimées automatiquement
-     * grâce à la contrainte ON DELETE CASCADE.
+     * Les nodes, transitions, conditions
+     * et actions associés sont supprimés
+     * automatiquement par les cascades SQLite.
      *
-     * @param key clé du dialogue
+     * @param key clé métier
      * @return true si un dialogue a été supprimé
      */
-    public boolean delete(String key) {
-
+    public boolean delete(
+            String key
+    ) {
         String sql = """
                 DELETE FROM dialogue
                 WHERE key = ?
@@ -262,7 +286,10 @@ public final class DialogueRepository {
                 PreparedStatement statement =
                         connection.prepareStatement(sql)
         ) {
-            statement.setString(1, key);
+            statement.setString(
+                    1,
+                    key
+            );
 
             return statement.executeUpdate() == 1;
 
@@ -280,73 +307,383 @@ public final class DialogueRepository {
     }
 
     /**
-     * Retourne la prochaine position disponible
-     * pour une nouvelle ligne.
+     * Sauvegarde l'état complet d'un dialogue existant.
      *
-     * @param key clé du dialogue
-     * @return prochaine position
+     * Les données composant le graphe sont réécrites
+     * dans une transaction unique.
+     *
+     * @param dialogue dialogue à sauvegarder
+     * @return true si la sauvegarde a réussi
      */
-    public int getNextLinePosition(String key) {
+    public boolean save(
+            Dialogue dialogue
+    ) {
+        boolean previousAutoCommit;
+
+        try {
+            previousAutoCommit =
+                    connection.getAutoCommit();
+
+        } catch (SQLException e) {
+
+            RpgLogger.error(
+                    "Impossible de lire l'état de la connexion avant "
+                            + "la sauvegarde du dialogue '"
+                            + dialogue.getKey()
+                            + "' : "
+                            + e.getMessage()
+            );
+
+            return false;
+        }
+
+        try {
+            connection.setAutoCommit(false);
+
+            long dialogueId =
+                    findDialogueId(
+                            dialogue.getKey()
+                    );
+
+            if (dialogueId == -1) {
+
+                RpgLogger.error(
+                        "Impossible de sauvegarder le dialogue '"
+                                + dialogue.getKey()
+                                + "' : dialogue introuvable."
+                );
+
+                connection.rollback();
+
+                return false;
+            }
+
+            /*
+             * Le start node doit être détaché avant
+             * de supprimer l'ancien graphe.
+             */
+            clearStartNode(
+                    dialogueId
+            );
+
+            deleteGraph(
+                    dialogueId
+            );
+
+            updateDialogueMetadata(
+                    dialogueId,
+                    dialogue.getName()
+            );
+
+            Map<String, Long> nodeIds =
+                    insertNodes(
+                            dialogueId,
+                            dialogue.getNodes()
+                    );
+
+            insertTransitions(
+                    dialogueId,
+                    dialogue.getTransitions(),
+                    nodeIds
+            );
+
+            updateStartNode(
+                    dialogueId,
+                    dialogue.getStartNodeKey(),
+                    nodeIds
+            );
+
+            connection.commit();
+
+            return true;
+
+        } catch (SQLException e) {
+
+            try {
+                connection.rollback();
+
+            } catch (SQLException rollbackException) {
+
+                RpgLogger.error(
+                        "Impossible d'annuler la sauvegarde du dialogue '"
+                                + dialogue.getKey()
+                                + "' : "
+                                + rollbackException.getMessage()
+                );
+            }
+
+            RpgLogger.error(
+                    "Impossible de sauvegarder le dialogue '"
+                            + dialogue.getKey()
+                            + "' : "
+                            + e.getMessage()
+            );
+
+            return false;
+
+        } finally {
+
+            try {
+                connection.setAutoCommit(
+                        previousAutoCommit
+                );
+
+            } catch (SQLException e) {
+
+                RpgLogger.error(
+                        "Impossible de restaurer l'état autoCommit "
+                                + "après la sauvegarde du dialogue '"
+                                + dialogue.getKey()
+                                + "' : "
+                                + e.getMessage()
+                );
+            }
+        }
+    }
+
+    /**
+     * Charge les nodes d'un dialogue.
+     */
+    private List<DialogueNode> loadNodes(
+            long dialogueId
+    ) throws SQLException {
+
+        List<DialogueNode> nodes =
+                new ArrayList<>();
 
         String sql = """
-                SELECT COALESCE(MAX(dl.position), 0) + 1
-                    AS next_position
-                FROM dialogue d
-                LEFT JOIN dialogue_line dl
-                    ON dl.dialogue_id = d.id
-                WHERE d.key = ?
+                SELECT
+                    key,
+                    text
+                FROM dialogue_node
+                WHERE dialogue_id = ?
+                ORDER BY id
                 """;
 
         try (
                 PreparedStatement statement =
                         connection.prepareStatement(sql)
         ) {
-            statement.setString(1, key);
+            statement.setLong(
+                    1,
+                    dialogueId
+            );
 
-            try (ResultSet result = statement.executeQuery()) {
+            try (
+                    ResultSet result =
+                            statement.executeQuery()
+            ) {
+                while (result.next()) {
 
-                if (result.next()) {
-                    return result.getInt("next_position");
+                    nodes.add(
+                            new DialogueNode(
+                                    result.getString("key"),
+                                    result.getString("text")
+                            )
+                    );
                 }
             }
-
-        } catch (SQLException e) {
-
-            RpgLogger.error(
-                    "Impossible de déterminer la prochaine ligne du dialogue '"
-                            + key
-                            + "' : "
-                            + e.getMessage()
-            );
         }
 
-        return 1;
+        return nodes;
     }
 
     /**
-     * Ajoute une ligne à un dialogue.
-     *
-     * @param key clé du dialogue
-     * @param position position de la ligne
-     * @param text texte
-     * @return true si l'ajout a réussi
+     * Charge les transitions d'un dialogue
+     * ainsi que leurs conditions et actions.
      */
-    public boolean addLine(
-            String key,
-            int position,
-            String text
-    ) {
+    private List<DialogueTransition> loadTransitions(
+            long dialogueId
+    ) throws SQLException {
+
+        List<DialogueTransition> transitions =
+                new ArrayList<>();
 
         String sql = """
-                INSERT INTO dialogue_line (
-                    dialogue_id,
-                    position,
-                    text
-                )
                 SELECT
-                    id,
-                    ?,
-                    ?
+                    dt.id,
+                    dt.key AS transition_key,
+                    source.key AS source_node_key,
+                    target.key AS target_node_key,
+                    dt.type,
+                    dt.label,
+                    dt.position
+                FROM dialogue_transition dt
+                JOIN dialogue_node source
+                    ON source.id = dt.source_node_id
+                LEFT JOIN dialogue_node target
+                    ON target.id = dt.target_node_id
+                WHERE dt.dialogue_id = ?
+                ORDER BY
+                    source.key,
+                    dt.position
+                """;
+
+        try (
+                PreparedStatement statement =
+                        connection.prepareStatement(sql)
+        ) {
+            statement.setLong(
+                    1,
+                    dialogueId
+            );
+
+            try (
+                    ResultSet result =
+                            statement.executeQuery()
+            ) {
+                while (result.next()) {
+
+                    long transitionId =
+                            result.getLong("id");
+
+                    DialogueTransitionType type =
+                            DialogueTransitionType.valueOf(
+                                    result.getString("type")
+                            );
+
+                    List<Condition> conditions =
+                            loadTransitionConditions(
+                                    transitionId
+                            );
+
+                    List<Action> actions =
+                            loadTransitionActions(
+                                    transitionId
+                            );
+
+                    transitions.add(
+                            new DialogueTransition(
+                                    result.getString(
+                                            "transition_key"
+                                    ),
+                                    result.getString(
+                                            "source_node_key"
+                                    ),
+                                    result.getString(
+                                            "target_node_key"
+                                    ),
+                                    type,
+                                    result.getString("label"),
+                                    result.getInt("position"),
+                                    conditions,
+                                    actions
+                            )
+                    );
+                }
+            }
+        }
+
+        return transitions;
+    }
+
+    /**
+     * Charge les conditions d'une transition.
+     */
+    private List<Condition> loadTransitionConditions(
+            long transitionId
+    ) throws SQLException {
+
+        List<Condition> conditions =
+                new ArrayList<>();
+
+        String sql = """
+                SELECT
+                    provider,
+                    expression
+                FROM dialogue_transition_condition
+                WHERE transition_id = ?
+                ORDER BY id
+                """;
+
+        try (
+                PreparedStatement statement =
+                        connection.prepareStatement(sql)
+        ) {
+            statement.setLong(
+                    1,
+                    transitionId
+            );
+
+            try (
+                    ResultSet result =
+                            statement.executeQuery()
+            ) {
+                while (result.next()) {
+
+                    conditions.add(
+                            new Condition(
+                                    result.getString("provider"),
+                                    result.getString("expression")
+                            )
+                    );
+                }
+            }
+        }
+
+        return conditions;
+    }
+
+    /**
+     * Charge les actions d'une transition
+     * dans leur ordre d'exécution.
+     */
+    private List<Action> loadTransitionActions(
+            long transitionId
+    ) throws SQLException {
+
+        List<Action> actions =
+                new ArrayList<>();
+
+        String sql = """
+                SELECT
+                    provider,
+                    expression,
+                    position
+                FROM dialogue_transition_action
+                WHERE transition_id = ?
+                ORDER BY position
+                """;
+
+        try (
+                PreparedStatement statement =
+                        connection.prepareStatement(sql)
+        ) {
+            statement.setLong(
+                    1,
+                    transitionId
+            );
+
+            try (
+                    ResultSet result =
+                            statement.executeQuery()
+            ) {
+                while (result.next()) {
+
+                    actions.add(
+                            new Action(
+                                    result.getString("provider"),
+                                    result.getString("expression"),
+                                    result.getInt("position")
+                            )
+                    );
+                }
+            }
+        }
+
+        return actions;
+    }
+
+    /**
+     * Recherche l'identifiant interne
+     * d'un dialogue.
+     */
+    private long findDialogueId(
+            String key
+    ) throws SQLException {
+
+        String sql = """
+                SELECT id
                 FROM dialogue
                 WHERE key = ?
                 """;
@@ -355,113 +692,468 @@ public final class DialogueRepository {
                 PreparedStatement statement =
                         connection.prepareStatement(sql)
         ) {
-            statement.setInt(1, position);
-            statement.setString(2, text);
-            statement.setString(3, key);
-
-            return statement.executeUpdate() == 1;
-
-        } catch (SQLException e) {
-
-            RpgLogger.error(
-                    "Impossible d'ajouter une ligne au dialogue '"
-                            + key
-                            + "' : "
-                            + e.getMessage()
+            statement.setString(
+                    1,
+                    key
             );
 
-            return false;
+            try (
+                    ResultSet result =
+                            statement.executeQuery()
+            ) {
+                if (result.next()) {
+                    return result.getLong("id");
+                }
+            }
         }
+
+        return -1;
     }
 
     /**
-     * Modifie une ligne existante.
-     *
-     * @param key clé du dialogue
-     * @param position position de la ligne
-     * @param text nouveau texte
-     * @return true si la ligne a été modifiée
+     * Retire temporairement le point d'entrée
+     * avant la reconstruction du graphe.
      */
-    public boolean updateLine(
-            String key,
-            int position,
-            String text
-    ) {
+    private void clearStartNode(
+            long dialogueId
+    ) throws SQLException {
 
         String sql = """
-                UPDATE dialogue_line
-                SET text = ?
-                WHERE dialogue_id = (
-                    SELECT id
-                    FROM dialogue
-                    WHERE key = ?
-                )
-                AND position = ?
+                UPDATE dialogue
+                SET start_node_id = NULL
+                WHERE id = ?
                 """;
 
         try (
                 PreparedStatement statement =
                         connection.prepareStatement(sql)
         ) {
-            statement.setString(1, text);
-            statement.setString(2, key);
-            statement.setInt(3, position);
-
-            return statement.executeUpdate() == 1;
-
-        } catch (SQLException e) {
-
-            RpgLogger.error(
-                    "Impossible de modifier la ligne "
-                            + position
-                            + " du dialogue '"
-                            + key
-                            + "' : "
-                            + e.getMessage()
+            statement.setLong(
+                    1,
+                    dialogueId
             );
 
-            return false;
+            statement.executeUpdate();
         }
     }
 
     /**
-     * Supprime une ligne d'un dialogue.
-     *
-     * @param key clé du dialogue
-     * @param position position de la ligne
-     * @return true si une ligne a été supprimée
+     * Supprime l'ancien graphe.
      */
-    public boolean removeLine(
-            String key,
-            int position
-    ) {
-        String sql = """
-                DELETE FROM dialogue_line
-                WHERE dialogue_id = (
-                    SELECT id
-                    FROM dialogue
-                    WHERE key = ?
-                )
-                AND position = ?
+    private void deleteGraph(
+            long dialogueId
+    ) throws SQLException {
+
+        String deleteTransitions = """
+                DELETE FROM dialogue_transition
+                WHERE dialogue_id = ?
                 """;
+
+        try (
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                deleteTransitions
+                        )
+        ) {
+            statement.setLong(
+                    1,
+                    dialogueId
+            );
+
+            statement.executeUpdate();
+        }
+
+        String deleteNodes = """
+                DELETE FROM dialogue_node
+                WHERE dialogue_id = ?
+                """;
+
+        try (
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                deleteNodes
+                        )
+        ) {
+            statement.setLong(
+                    1,
+                    dialogueId
+            );
+
+            statement.executeUpdate();
+        }
+    }
+
+    /**
+     * Met à jour les métadonnées
+     * du dialogue.
+     */
+    private void updateDialogueMetadata(
+            long dialogueId,
+            String name
+    ) throws SQLException {
+
+        String sql = """
+                UPDATE dialogue
+                SET name = ?
+                WHERE id = ?
+                """;
+
         try (
                 PreparedStatement statement =
                         connection.prepareStatement(sql)
         ) {
-            statement.setString(1, key);
-            statement.setInt(2, position);
-            return statement.executeUpdate() == 1;
-
-        } catch (SQLException e) {
-            RpgLogger.error(
-                    "Impossible de supprimer la ligne "
-                            + position
-                            + " du dialogue '"
-                            + key
-                            + "' : "
-                            + e.getMessage()
+            statement.setString(
+                    1,
+                    name
             );
-            return false;
+
+            statement.setLong(
+                    2,
+                    dialogueId
+            );
+
+            statement.executeUpdate();
+        }
+    }
+
+    /**
+     * Insère tous les nodes et retourne
+     * leur identifiant SQL par clé métier.
+     */
+    private Map<String, Long> insertNodes(
+            long dialogueId,
+            List<DialogueNode> nodes
+    ) throws SQLException {
+
+        Map<String, Long> nodeIds =
+                new HashMap<>();
+
+        String sql = """
+                INSERT INTO dialogue_node (
+                    dialogue_id,
+                    key,
+                    text
+                )
+                VALUES (?, ?, ?)
+                """;
+
+        for (DialogueNode node : nodes) {
+
+            try (
+                    PreparedStatement statement =
+                            connection.prepareStatement(
+                                    sql,
+                                    Statement.RETURN_GENERATED_KEYS
+                            )
+            ) {
+                statement.setLong(
+                        1,
+                        dialogueId
+                );
+
+                statement.setString(
+                        2,
+                        node.getKey()
+                );
+
+                statement.setString(
+                        3,
+                        node.getText()
+                );
+
+                statement.executeUpdate();
+
+                try (
+                        ResultSet generatedKeys =
+                                statement.getGeneratedKeys()
+                ) {
+                    if (!generatedKeys.next()) {
+
+                        throw new SQLException(
+                                "Impossible de récupérer l'id du node '"
+                                        + node.getKey()
+                                        + "'."
+                        );
+                    }
+
+                    nodeIds.put(
+                            node.getKey(),
+                            generatedKeys.getLong(1)
+                    );
+                }
+            }
+        }
+
+        return nodeIds;
+    }
+
+    /**
+     * Insère toutes les transitions du graphe.
+     */
+    private void insertTransitions(
+            long dialogueId,
+            List<DialogueTransition> transitions,
+            Map<String, Long> nodeIds
+    ) throws SQLException {
+
+        String sql = """
+                INSERT INTO dialogue_transition (
+                    dialogue_id,
+                    key,
+                    source_node_id,
+                    target_node_id,
+                    type,
+                    label,
+                    position
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """;
+
+        for (DialogueTransition transition :
+                transitions) {
+
+            Long sourceId =
+                    nodeIds.get(
+                            transition.getSourceNodeKey()
+                    );
+
+            if (sourceId == null) {
+                throw new SQLException(
+                        "Node source introuvable : "
+                                + transition.getSourceNodeKey()
+                );
+            }
+
+            Long targetId = null;
+
+            if (transition.getTargetNodeKey()
+                    != null) {
+
+                targetId =
+                        nodeIds.get(
+                                transition.getTargetNodeKey()
+                        );
+
+                if (targetId == null) {
+                    throw new SQLException(
+                            "Node cible introuvable : "
+                                    + transition.getTargetNodeKey()
+                    );
+                }
+            }
+
+            try (
+                    PreparedStatement statement =
+                            connection.prepareStatement(
+                                    sql,
+                                    Statement.RETURN_GENERATED_KEYS
+                            )
+            ) {
+                statement.setLong(
+                        1,
+                        dialogueId
+                );
+
+                statement.setString(
+                        2,
+                        transition.getKey()
+                );
+
+                statement.setLong(
+                        3,
+                        sourceId
+                );
+
+                if (targetId == null) {
+                    statement.setNull(
+                            4,
+                            java.sql.Types.INTEGER
+                    );
+                } else {
+                    statement.setLong(
+                            4,
+                            targetId
+                    );
+                }
+
+                statement.setString(
+                        5,
+                        transition.getType()
+                                .name()
+                );
+
+                statement.setString(
+                        6,
+                        transition.getLabel()
+                );
+
+                statement.setInt(
+                        7,
+                        transition.getPosition()
+                );
+
+                statement.executeUpdate();
+
+                try (
+                        ResultSet generatedKeys =
+                                statement.getGeneratedKeys()
+                ) {
+                    if (!generatedKeys.next()) {
+                        throw new SQLException(
+                                "Impossible de récupérer l'id d'une transition."
+                        );
+                    }
+
+                    long transitionId =
+                            generatedKeys.getLong(1);
+
+                    insertTransitionConditions(
+                            transitionId,
+                            transition.getConditions()
+                    );
+
+                    insertTransitionActions(
+                            transitionId,
+                            transition.getActions()
+                    );
+                }
+            }
+        }
+    }
+
+    private void insertTransitionConditions(
+            long transitionId,
+            List<Condition> conditions
+    ) throws SQLException {
+
+        String sql = """
+                INSERT INTO dialogue_transition_condition (
+                    transition_id,
+                    provider,
+                    expression
+                )
+                VALUES (?, ?, ?)
+                """;
+
+        for (Condition condition : conditions) {
+
+            try (
+                    PreparedStatement statement =
+                            connection.prepareStatement(sql)
+            ) {
+                statement.setLong(
+                        1,
+                        transitionId
+                );
+
+                statement.setString(
+                        2,
+                        condition.getProvider()
+                );
+
+                statement.setString(
+                        3,
+                        condition.getExpression()
+                );
+
+                statement.executeUpdate();
+            }
+        }
+    }
+
+    private void insertTransitionActions(
+            long transitionId,
+            List<Action> actions
+    ) throws SQLException {
+
+        String sql = """
+                INSERT INTO dialogue_transition_action (
+                    transition_id,
+                    provider,
+                    expression,
+                    position
+                )
+                VALUES (?, ?, ?, ?)
+                """;
+
+        for (Action action : actions) {
+
+            try (
+                    PreparedStatement statement =
+                            connection.prepareStatement(sql)
+            ) {
+                statement.setLong(
+                        1,
+                        transitionId
+                );
+
+                statement.setString(
+                        2,
+                        action.getProvider()
+                );
+
+                statement.setString(
+                        3,
+                        action.getExpression()
+                );
+
+                statement.setInt(
+                        4,
+                        action.getPosition()
+                );
+
+                statement.executeUpdate();
+            }
+        }
+    }
+
+    /**
+     * Définit le node de départ
+     * après reconstruction du graphe.
+     */
+    private void updateStartNode(
+            long dialogueId,
+            String startNodeKey,
+            Map<String, Long> nodeIds
+    ) throws SQLException {
+
+        if (startNodeKey == null) {
+            return;
+        }
+
+        Long startNodeId =
+                nodeIds.get(
+                        startNodeKey
+                );
+
+        if (startNodeId == null) {
+            throw new SQLException(
+                    "Node de départ introuvable : "
+                            + startNodeKey
+            );
+        }
+
+        String sql = """
+                UPDATE dialogue
+                SET start_node_id = ?
+                WHERE id = ?
+                """;
+
+        try (
+                PreparedStatement statement =
+                        connection.prepareStatement(sql)
+        ) {
+            statement.setLong(
+                    1,
+                    startNodeId
+            );
+
+            statement.setLong(
+                    2,
+                    dialogueId
+            );
+
+            statement.executeUpdate();
         }
     }
 }

@@ -1,8 +1,8 @@
 package fr.doryamy.rpgengine.condition.providers;
 
 import fr.doryamy.rpgengine.condition.ConditionProvider;
-import fr.doryamy.rpgengine.trigger.TriggerContext;
 import fr.doryamy.rpgengine.repository.PlayerVariableRepository;
+import fr.doryamy.rpgengine.trigger.TriggerContext;
 
 /**
  * Provider de conditions associé aux variables joueur.

@@ -770,65 +770,347 @@ Trigger
 
 # Système de dialogues
 
-Le système de dialogues utilise deux tables :
+Le système de dialogues utilise un modèle narratif orienté graphe.
 
+Un dialogue n'est pas représenté comme une simple liste de lignes.
+
+Il est composé :
+
+* de nodes narratifs ;
+* de transitions reliant ces nodes ;
+* de conditions pouvant contrôler les transitions ;
+* d'actions exécutées lors du passage d'une transition.
+
+```text
+Dialogue
+   │
+   ├── DialogueNode
+   │
+   └── DialogueTransition
+           │
+           ├── Conditions
+           └── Actions
 ```
-dialogue
+
+Cette architecture permet au système de dialogue de réutiliser directement le Rule Engine existant.
+
+Les conditions sont évaluées par `ConditionManager`.
+
+Les actions sont exécutées par `ActionManager`.
+
+Le système de dialogue ne possède donc aucune logique parallèle de conditions ou d'actions.
+
+---
+
+## Table dialogue
+
+| Colonne         | Type    | Rôle                |
+| --------------- | ------- | ------------------- |
+| `id`            | INTEGER | Identifiant interne |
+| `key`           | TEXT    | Clé métier unique   |
+| `name`          | TEXT    | Nom lisible         |
+| `start_node_id` | INTEGER | Node de départ      |
+
+Exemple :
+
+```text
+key  = chief_intro
+name = Chef du village - Introduction
+```
+
+`start_node_id` indique le point d'entrée du graphe narratif.
+
+Cette valeur peut temporairement être absente pendant l'édition d'un dialogue.
+
+Un dialogue ne peut cependant pas être considéré comme exécutable tant qu'un node de départ valide n'est pas défini.
+
+Cette cohérence est vérifiée par le système de validation des dialogues.
+
+---
+
+## Table dialogue_node
+
+Un node représente une unité narrative atomique.
+
+Il contient un seul texte.
+
+| Colonne       | Type    | Rôle                         |
+| ------------- | ------- | ---------------------------- |
+| `id`          | INTEGER | Identifiant interne          |
+| `dialogue_id` | INTEGER | Dialogue propriétaire        |
+| `key`         | TEXT    | Clé du node dans le dialogue |
+| `text`        | TEXT    | Contenu narratif             |
+
+La combinaison :
+
+```text
+(dialogue_id, key)
+```
+
+est unique.
+
+Exemple :
+
+```text
+key  = offer
+text = Peux-tu m'aider à retrouver mon marteau ?
+```
+
+Un node ne contient :
+
+* aucune condition ;
+* aucune action ;
+* aucune information de navigation.
+
+La navigation appartient exclusivement aux transitions.
+
+---
+
+## Table dialogue_transition
+
+Une transition représente un passage explicite entre deux nodes.
+
+| Colonne          | Type    | Rôle                         |
+| ---------------- | ------- | ---------------------------- |
+| `id`             | INTEGER | Identifiant                  |
+| `dialogue_id`    | INTEGER | Dialogue propriétaire        |
+| `source_node_id` | INTEGER | Node de départ               |
+| `target_node_id` | INTEGER | Node cible                   |
+| `type`           | TEXT    | Type de transition           |
+| `label`          | TEXT    | Texte présenté pour un choix |
+| `position`       | INTEGER | Ordre de présentation        |
+
+Les transitions disponibles sont actuellement :
+
+```text
+AUTO
+CHOICE
+END
+```
+
+### AUTO
+
+Une transition `AUTO` poursuit automatiquement le dialogue.
+
+```text
+Node A
    │
    ▼
+Node B
+```
+
+Elle possède obligatoirement une cible et aucun label.
+
+### CHOICE
+
+Une transition `CHOICE` représente une décision proposée au joueur.
+
+```text
+"Acceptes-tu ?"
+
+├── Oui
+└── Non
+```
+
+Elle possède :
+
+* une cible ;
+* un label ;
+* une position permettant d'ordonner les choix.
+
+### END
+
+Une transition `END` termine explicitement le dialogue.
+
+```text
+Node
+ │
+ ▼
+END
+```
+
+Elle ne possède :
+
+* aucune cible ;
+* aucun label.
+
+Un node sans transition ne signifie jamais implicitement que le dialogue est terminé.
+
+Il représente une structure incomplète ou invalide.
+
+---
+
+## Conditions des transitions
+
+La table :
+
+```text
+dialogue_transition_condition
+```
+
+associe des conditions à une transition.
+
+Structure :
+
+| Colonne         | Type    | Rôle                    |
+| --------------- | ------- | ----------------------- |
+| `id`            | INTEGER | Identifiant             |
+| `transition_id` | INTEGER | Transition propriétaire |
+| `provider`      | TEXT    | Source de données       |
+| `expression`    | TEXT    | Expression à vérifier   |
+
+Ces données sont reconstruites sous forme d'objets `Condition`.
+
+Leur évaluation est ensuite déléguée au `ConditionManager` existant.
+
+Le système de dialogue ne possède donc aucun évaluateur spécifique.
+
+---
+
+## Actions des transitions
+
+La table :
+
+```text
+dialogue_transition_action
+```
+
+associe des actions à une transition.
+
+Structure :
+
+| Colonne         | Type    | Rôle                    |
+| --------------- | ------- | ----------------------- |
+| `id`            | INTEGER | Identifiant             |
+| `transition_id` | INTEGER | Transition propriétaire |
+| `provider`      | TEXT    | Executor                |
+| `expression`    | TEXT    | Expression de l'action  |
+| `position`      | INTEGER | Ordre d'exécution       |
+
+Ces données sont reconstruites sous forme d'objets `Action`.
+
+Leur exécution est déléguée au `ActionManager`.
+
+---
+
+## Exemple
+
+```text
+Node : offer
+
+"Peux-tu m'aider ?"
+```
+
+peut posséder :
+
+```text
+Transition 1
+
+type   = CHOICE
+label  = Oui
+target = accept
+```
+
+avec :
+
+```text
+Action
+
+PLAYER
+quest_started=true
+```
+
+et :
+
+```text
+Transition 2
+
+type   = CHOICE
+label  = Non
+target = goodbye
+```
+
+Le runtime devient :
+
+```text
+DialogueRunner
+        │
+        ▼
+DialogueNode
+        │
+        ▼
+DialogueTransition
+        │
+        ├── ConditionManager
+        │
+        ▼
+   choix disponible
+        │
+        ▼
+   joueur choisit
+        │
+        ├── ActionManager
+        │
+        ▼
+    node suivant
+```
+
+---
+
+## Validation
+
+SQLite garantit l'intégrité locale des relations et certaines contraintes élémentaires.
+
+La cohérence globale du graphe appartient à `DialogueValidator`.
+
+Il vérifiera notamment :
+
+* l'existence du node de départ ;
+* l'existence des sources et cibles ;
+* l'appartenance des nodes au dialogue ;
+* l'existence explicite de fins ;
+* les nodes inaccessibles ;
+* les éventuelles boucles automatiques infinies.
+
+Le moteur ne déduit jamais la structure d'un dialogue.
+
+Il exécute uniquement ce qui est explicitement décrit.
+
+Toute ambiguïté est considérée comme une erreur de conception.
+
+---
+
+## V8 - Graphe narratif
+
+Classe :
+
+```text
+V8_DialogGraphSystem
+```
+
+Cette migration remplace le système linéaire introduit par V7.
+
+L'ancienne table :
+
+```text
 dialogue_line
 ```
 
-Un dialogue représente une ressource narrative identifiable par une clé métier.
+est supprimée.
 
-Ses lignes sont stockées séparément afin de préserver leur ordre et de permettre l'évolution future du système.
+Elle est remplacée par :
 
-# Table dialogue
+```text
+dialogue_node
 
-| Colonne       | Type    | Rôle                    |
-|---------------| ------- |-------------------------|
-| `id`          | INTEGER | Identifiant interne     |
-| `key`         | TEXT    | Clé métier unique       |
-| `name`        | TEXT    | Nom lisible du dialogue |
+dialogue_transition
 
-Exemple :
+dialogue_transition_condition
 
-```
-provider = DIALOG
-
-expression = chief_intro
+dialogue_transition_action
 ```
 
-# Table dialogue_line
-
-| Colonne       | Type     | Rôle                    |
-|---------------|----------|-------------------------|
-| `id`          | INTEGER  | Identifiant interne     |
-| `dialogue_id` | INTEGER  | Dialogue propriétaire   |
-| `position`    | INTEGER  | Ordre d'affichage       |
-| `text`        | TEXT     | Texte de la ligne       |
-
-Relation :
-
-```
-dialogue_line.dialogue_id
-     │
-     ▼
-dialogue.id
-```
-
-La combinaison (dialogue_id, position) est unique. Ainsi, deux lignes d'un même dialogue ne peuvent pas occuper la même position.
-
-La suppression d'un dialogue entraîne également la suppression de ses lignes grâce à la relation ON DELETE CASCADE.
-
-Exemple :
-
-```
-chief_intro
-
-1 → Bienvenue aventurier ! 
-2 → Une grande aventure commence...
-```
+Cette évolution transforme le dialogue d'une simple séquence de textes en un graphe narratif capable d'exploiter directement les conditions et les actions du Rule Engine.
 
 ---
 

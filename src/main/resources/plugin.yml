@@ -1,5 +1,5 @@
 name: RPGEngine
-version: 1.0.1
+version: 1.3.1
 main: fr.doryamy.rpgengine.RpgEngine
 api-version: '1.21.1'
 author: DoryAmy

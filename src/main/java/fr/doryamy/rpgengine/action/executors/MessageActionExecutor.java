@@ -1,8 +1,8 @@
 package fr.doryamy.rpgengine.action.executors;
 
 import fr.doryamy.rpgengine.action.ActionExecutor;
-import fr.doryamy.rpgengine.trigger.TriggerContext;
 import fr.doryamy.rpgengine.model.Action;
+import fr.doryamy.rpgengine.trigger.TriggerContext;
 
 /**
  * Executor responsable de l'affichage

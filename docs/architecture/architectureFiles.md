@@ -45,16 +45,40 @@ src
                             V5_RenameConditionTypeAndValue.java
                             V6_RenameActionTypeAndValue.java
                             V7_DialogSystem.java
+                            V8_DialogGraphSystem.java
                         DatabaseManager.java
                         MigrationManager.java
                     dialogue
                         command
+                            AddNodeDialogueCommand.java
+                            AddTransitionActionDialogueCommand.java
+                            AddTransitionConditionDialogueCommand.java
+                            AddTransitionDialogueCommand.java
+                            ChooseDialogueCommand.java
                             CreateDialogueCommand.java
+                            DeleteDialogueCommand.java
+                            InfoDialogueCommand.java
                             ListDialogueCommand.java
+                            ListTransitionActionDialogueCommand.java
+                            ListTransitionConditionDialogueCommand.java
+                            PreviewDialogueCommand.java
+                            RemoveTransitionActionDialogueCommand.java
+                            RemoveTransitionConditionDialogueCommand.java
+                            SetStartNodeDialogueCommand.java
+                            SetTransitionDialogueCommand.java
+                            UpdateNodeTextDialogueCommand.java
                         Dialogue.java
-                        DialogueLine.java
+                        DialogueNavigator.java
+                        DialogueNode.java
                         DialogueRepository.java
+                        DialogueRunner.java
                         DialogueService.java
+                        DialogueSession.java
+                        DialogueSessionManager.java
+                        DialogueTransition.java
+                        DialogueTransitionType.java
+                        DialogueValidationResult.java
+                        DialogueValidator.java
                     listener
                         NPCListener.java
                     model

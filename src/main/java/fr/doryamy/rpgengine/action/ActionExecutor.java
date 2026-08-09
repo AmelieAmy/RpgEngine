@@ -1,7 +1,7 @@
 package fr.doryamy.rpgengine.action;
 
-import fr.doryamy.rpgengine.trigger.TriggerContext;
 import fr.doryamy.rpgengine.model.Action;
+import fr.doryamy.rpgengine.trigger.TriggerContext;
 
 /**
  * Contrat d'exécution d'une action du moteur RPG.

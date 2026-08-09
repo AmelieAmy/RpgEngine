@@ -40,6 +40,13 @@ public final class ListDialogueCommand
             CommandSender sender,
             String[] args
     ) {
+        if (args.length != 0) {
+            sender.sendMessage(
+                    "Usage : /rpg dialog list"
+            );
+            return false;
+        }
+
         List<Dialogue> dialogues =
                 dialogueService.findAll();
 

@@ -1,7 +1,7 @@
 package fr.doryamy.rpgengine.action;
 
-import fr.doryamy.rpgengine.trigger.TriggerContext;
 import fr.doryamy.rpgengine.model.Action;
+import fr.doryamy.rpgengine.trigger.TriggerContext;
 import fr.doryamy.rpgengine.util.RpgLogger;
 
 import java.util.HashMap;

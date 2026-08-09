@@ -7,11 +7,11 @@ import fr.doryamy.rpgengine.action.executors.PlayerVariableActionExecutor;
 import fr.doryamy.rpgengine.command.CommandManager;
 import fr.doryamy.rpgengine.command.RpgCommand;
 import fr.doryamy.rpgengine.condition.ConditionManager;
+import fr.doryamy.rpgengine.condition.expression.ExpressionEvaluator;
+import fr.doryamy.rpgengine.condition.expression.ExpressionParser;
 import fr.doryamy.rpgengine.condition.providers.PlayerConditionProvider;
 import fr.doryamy.rpgengine.database.DatabaseManager;
-import fr.doryamy.rpgengine.dialogue.DialogueRepository;
-import fr.doryamy.rpgengine.dialogue.DialogueRunner;
-import fr.doryamy.rpgengine.dialogue.DialogueService;
+import fr.doryamy.rpgengine.dialogue.*;
 import fr.doryamy.rpgengine.dialogue.command.*;
 import fr.doryamy.rpgengine.listener.NPCListener;
 import fr.doryamy.rpgengine.repository.PlayerVariableRepository;
@@ -32,7 +32,7 @@ import org.bukkit.plugin.java.JavaPlugin;
  * - de la base de données ;
  * - des repositories ;
  * - des services ;
- * - des composants d'exécution ;
+ * - des composants runtime ;
  * - des managers ;
  * - des providers ;
  * - des executors ;
@@ -67,30 +67,75 @@ public final class RpgEngine extends JavaPlugin {
                 createDialogueRepository();
 
         /*
-         * Services métier
+         * Expression Engine
          */
-        dialogueService = createDialogueService(dialogueRepository);
+        ExpressionParser expressionParser =
+                new ExpressionParser();
+
+        ExpressionEvaluator expressionEvaluator =
+                new ExpressionEvaluator();
 
         /*
-         * Runtime des features
+         * Services métier
          */
-        DialogueRunner dialogueRunner = createDialogueRunner();
+        dialogueService =
+                createDialogueService(
+                        dialogueRepository,
+                        expressionParser
+                );
 
         /*
          * Rule Engine
          */
         ConditionManager conditionManager =
                 createConditionManager(
-                        playerVariableRepository
+                        playerVariableRepository,
+                        expressionParser,
+                        expressionEvaluator
                 );
 
         ActionManager actionManager =
-                createActionManager(
-                        playerVariableRepository,
-                        dialogueRepository,
-                        dialogueRunner
+                createActionManager();
+
+        /*
+         * Runtime des dialogues
+         */
+        DialogueValidator dialogueValidator =
+                createDialogueValidator();
+
+        DialogueNavigator dialogueNavigator =
+                createDialogueNavigator(
+                        conditionManager
                 );
 
+        DialogueSessionManager dialogueSessionManager =
+                createDialogueSessionManager();
+
+        DialogueRunner dialogueRunner =
+                createDialogueRunner(
+                        dialogueValidator,
+                        dialogueNavigator,
+                        dialogueSessionManager,
+                        actionManager
+                );
+
+        /*
+         * Executors
+         *
+         * Ils sont enregistrés après la création
+         * du DialogueRunner afin d'éviter une
+         * dépendance circulaire de construction.
+         */
+        registerActionExecutors(
+                actionManager,
+                playerVariableRepository,
+                dialogueRepository,
+                dialogueRunner
+        );
+
+        /*
+         * Trigger Engine
+         */
         triggerManager =
                 createTriggerManager(
                         conditionManager,
@@ -190,23 +235,14 @@ public final class RpgEngine extends JavaPlugin {
      * @return service configuré
      */
     private DialogueService createDialogueService(
-            DialogueRepository dialogueRepository
+            DialogueRepository dialogueRepository,
+            ExpressionParser expressionParser
     ) {
 
         return new DialogueService(
-                dialogueRepository
+                dialogueRepository,
+                expressionParser
         );
-    }
-
-    /**
-     * Crée le composant responsable
-     * de l'exécution des dialogues en jeu.
-     *
-     * @return runner configuré
-     */
-    private DialogueRunner createDialogueRunner() {
-
-        return new DialogueRunner();
     }
 
     /**
@@ -218,11 +254,16 @@ public final class RpgEngine extends JavaPlugin {
      * @return ConditionManager configuré
      */
     private ConditionManager createConditionManager(
-            PlayerVariableRepository playerVariableRepository
+            PlayerVariableRepository playerVariableRepository,
+            ExpressionParser expressionParser,
+            ExpressionEvaluator expressionEvaluator
     ) {
 
         ConditionManager conditionManager =
-                new ConditionManager();
+                new ConditionManager(
+                        expressionParser,
+                        expressionEvaluator
+                );
 
         conditionManager.register(
                 new PlayerConditionProvider(
@@ -234,25 +275,100 @@ public final class RpgEngine extends JavaPlugin {
     }
 
     /**
-     * Crée et configure le système d'actions.
+     * Crée le système d'actions.
      *
+     * Les executors sont enregistrés séparément
+     * après la création du runtime des dialogues.
+     *
+     * @return ActionManager vide
+     */
+    private ActionManager createActionManager() {
+
+        return new ActionManager();
+    }
+
+    /**
+     * Crée le validateur structurel
+     * des graphes de dialogue.
+     *
+     * @return validateur configuré
+     */
+    private DialogueValidator createDialogueValidator() {
+
+        return new DialogueValidator();
+    }
+
+    /**
+     * Crée le navigateur utilisé
+     * par le runtime des dialogues.
+     *
+     * @param conditionManager système de conditions
+     *
+     * @return navigateur configuré
+     */
+    private DialogueNavigator createDialogueNavigator(
+            ConditionManager conditionManager
+    ) {
+
+        return new DialogueNavigator(
+                conditionManager
+        );
+    }
+
+    /**
+     * Crée le gestionnaire des sessions
+     * de dialogue actives.
+     *
+     * @return gestionnaire configuré
+     */
+    private DialogueSessionManager
+    createDialogueSessionManager() {
+
+        return new DialogueSessionManager();
+    }
+
+    /**
+     * Crée le runtime des dialogues.
+     *
+     * @param dialogueValidator validateur des dialogues
+     * @param dialogueNavigator navigateur des dialogues
+     * @param dialogueSessionManager gestionnaire des sessions
+     * @param actionManager système d'actions
+     *
+     * @return DialogueRunner configuré
+     */
+    private DialogueRunner createDialogueRunner(
+            DialogueValidator dialogueValidator,
+            DialogueNavigator dialogueNavigator,
+            DialogueSessionManager dialogueSessionManager,
+            ActionManager actionManager
+    ) {
+
+        return new DialogueRunner(
+                dialogueValidator,
+                dialogueNavigator,
+                dialogueSessionManager,
+                actionManager
+        );
+    }
+
+    /**
+     * Enregistre les executors disponibles
+     * auprès du système d'actions.
+     *
+     * @param actionManager système d'actions
      * @param playerVariableRepository repository
      *                                 des variables joueur
      * @param dialogueRepository repository
      *                           des dialogues
-     * @param dialogueRunner composant d'exécution
-     *                       des dialogues
-     *
-     * @return ActionManager configuré
+     * @param dialogueRunner runtime des dialogues
      */
-    private ActionManager createActionManager(
+    private void registerActionExecutors(
+            ActionManager actionManager,
             PlayerVariableRepository playerVariableRepository,
             DialogueRepository dialogueRepository,
             DialogueRunner dialogueRunner
     ) {
-
-        ActionManager actionManager =
-                new ActionManager();
 
         actionManager.register(
                 new MessageActionExecutor()
@@ -270,8 +386,6 @@ public final class RpgEngine extends JavaPlugin {
                         dialogueRunner
                 )
         );
-
-        return actionManager;
     }
 
     /**
@@ -299,6 +413,7 @@ public final class RpgEngine extends JavaPlugin {
      * de commandes administrateur.
      *
      * @param dialogueService service des dialogues
+     * @param dialogueRunner runtime des dialogues
      *
      * @return CommandManager configuré
      */
@@ -306,31 +421,122 @@ public final class RpgEngine extends JavaPlugin {
             DialogueService dialogueService,
             DialogueRunner dialogueRunner
     ) {
-        CommandManager commandManager = new CommandManager();
+
+        /********** Dialog commands ***********/
+
+        CommandManager commandManager =
+                new CommandManager();
+
         commandManager.register(
                 new CreateDialogueCommand(
                         dialogueService
                 )
         );
+
+        commandManager.register(
+                new DeleteDialogueCommand(
+                        dialogueService
+                )
+        );
+
         commandManager.register(
                 new ListDialogueCommand(
                         dialogueService
                 )
         );
+
         commandManager.register(
                 new InfoDialogueCommand(
                         dialogueService
                 )
         );
+
         commandManager.register(
-                new AddLineDialogueCommand(
+                new ChooseDialogueCommand(
+                        dialogueRunner
+                )
+        );
+
+        /********** Node Dialogue commands ***********/
+
+        commandManager.register(
+                new AddNodeDialogueCommand(
                         dialogueService
                 )
         );
+
         commandManager.register(
-                new PlayDialogueCommand(
+                new SetStartNodeDialogueCommand(
+                        dialogueService
+                )
+        );
+
+        commandManager.register(
+                new UpdateNodeTextDialogueCommand(
+                        dialogueService
+                )
+        );
+
+        /********** Preview Dialogue commands ***********/
+
+        commandManager.register(
+                new PreviewDialogueCommand(
                         dialogueService,
                         dialogueRunner
+                )
+        );
+
+        /********** Transition Dialogue commands ***********/
+
+        commandManager.register(
+                new AddTransitionDialogueCommand(
+                        dialogueService
+                )
+        );
+
+        commandManager.register(
+                new SetTransitionDialogueCommand(
+                        dialogueService
+                )
+        );
+
+        /********** Transition Action Dialogue commands ***********/
+
+        commandManager.register(
+                new AddTransitionActionDialogueCommand(
+                        dialogueService
+                )
+        );
+
+        commandManager.register(
+                new RemoveTransitionActionDialogueCommand(
+                        dialogueService
+                )
+        );
+
+        commandManager.register(
+                new ListTransitionActionDialogueCommand(
+                        dialogueService
+                )
+        );
+
+        /********** Transition Condition Dialogue commands ***********/
+
+        commandManager.register(
+                new AddTransitionConditionDialogueCommand(
+                        dialogueService
+                )
+        );
+
+        commandManager.register(
+                new RemoveTransitionConditionDialogueCommand(
+                        dialogueService
+                )
+        );
+
+        commandManager.register(
+                new ListTransitionConditionDialogueCommand(
+                        dialogueService
                 )
         );
 
@@ -340,7 +546,8 @@ public final class RpgEngine extends JavaPlugin {
     /**
      * Enregistre la commande principale /rpg.
      *
-     * @param commandManager gestionnaire des sous-commandes
+     * @param commandManager gestionnaire
+     *                       des sous-commandes
      */
     private void registerCommands(
             CommandManager commandManager

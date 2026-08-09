@@ -41,35 +41,93 @@ entity "player_variable" as player_variable {
     value : TEXT
 }
 
+entity "dialogue" as dialogue {
+    * id : INTEGER <<PK>>
+    --
+    key : TEXT <<UQ>>
+    name : TEXT
+    start_node_id : INTEGER <<FK>>
+}
+
+entity "dialogue_node" as dialogue_node {
+    * id : INTEGER <<PK>>
+    --
+    dialogue_id : INTEGER <<FK>>
+    key : TEXT
+    text : TEXT
+}
+
+entity "dialogue_transition" as dialogue_transition {
+    * id : INTEGER <<PK>>
+    --
+    dialogue_id : INTEGER <<FK>>
+    source_node_id : INTEGER <<FK>>
+    target_node_id : INTEGER <<FK, nullable>>
+    type : TEXT
+    label : TEXT <<nullable>>
+    position : INTEGER
+}
+
+entity "dialogue_transition_condition" as transition_condition {
+    * id : INTEGER <<PK>>
+    --
+    transition_id : INTEGER <<FK>>
+    provider : TEXT
+    expression : TEXT
+}
+
+entity "dialogue_transition_action" as transition_action {
+    * id : INTEGER <<PK>>
+    --
+    transition_id : INTEGER <<FK>>
+    provider : TEXT
+    expression : TEXT
+    position : INTEGER
+}
+
 entity "schema_version" as schema_version {
     version : INTEGER
 }
 
-
 trigger ||--o{ condition : possède
 trigger ||--o{ action : possède
 
+dialogue ||--o{ dialogue_node : contient
+dialogue ||--o{ dialogue_transition : contient
 
-note right of trigger
-  target_id identifie la cible métier.
+dialogue_node ||--o{ dialogue_transition : source
+dialogue_node |o--o{ dialogue_transition : cible
 
-  Exemples :
-  NPC -> "210"
-  REGION -> "village_center"
+dialogue_transition ||--o{ transition_condition : possède
+dialogue_transition ||--o{ transition_action : possède
 
-  Il ne s'agit pas d'une clé étrangère.
+dialogue |o--o| dialogue_node : start_node
+
+note right of dialogue_transition
+  AUTO
+    target obligatoire
+    label absent
+
+  CHOICE
+    target obligatoire
+    label obligatoire
+
+  END
+    target absent
+    label absent
 end note
 
+note right of dialogue
+  start_node_id peut être NULL
+  pendant l'édition.
+
+  Un dialogue exécutable doit
+  obligatoirement définir son
+  node de départ.
+end note
 
 note bottom of player_variable
-  Contrainte UNIQUE :
-  (player_uuid, key)
-end note
-
-
-note right of schema_version
-  Version actuelle
-  du schéma SQLite.
+  UNIQUE(player_uuid, key)
 end note
 
 @enduml

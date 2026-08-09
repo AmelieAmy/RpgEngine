@@ -8,6 +8,10 @@ Son objectif n'est pas de fournir un système de quêtes prédéfini, mais un en
 
 Les règles du jeu sont décrites dans la base de données plutôt que codées directement en Java.
 
+Le moteur ne déduit jamais la structure d'un dialogue. Il exécute uniquement ce qui est explicitement décrit.
+
+Toute ambiguïté est considérée comme une erreur de conception.
+
 ---
 
 ## Principe fondamental

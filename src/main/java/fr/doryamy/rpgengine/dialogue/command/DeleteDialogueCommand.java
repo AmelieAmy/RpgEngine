@@ -6,25 +6,20 @@ import fr.doryamy.rpgengine.dialogue.DialogueService;
 import org.bukkit.command.CommandSender;
 
 /**
- * Ajoute une ligne à la fin d'un dialogue.
+ * Supprime un dialogue.
  *
  * Syntaxe :
- * /rpg dialog addline <key> <text>
+ * /rpg dialog delete <dialogueKey>
  *
  * Exemple :
- * /rpg dialog addline chief_intro Bienvenue aventurier !
+ * /rpg dialog delete chief_test
  */
-public final class AddLineDialogueCommand
+public final class DeleteDialogueCommand
         implements RpgSubcommand {
 
     private final DialogueService dialogueService;
 
-    /**
-     * Construit la commande.
-     *
-     * @param dialogueService service des dialogues
-     */
-    public AddLineDialogueCommand(
+    public DeleteDialogueCommand(
             DialogueService dialogueService
     ) {
         this.dialogueService =
@@ -33,7 +28,7 @@ public final class AddLineDialogueCommand
 
     @Override
     public String getPath() {
-        return "dialog addline";
+        return "dialog delete";
     }
 
     @Override
@@ -41,33 +36,18 @@ public final class AddLineDialogueCommand
             CommandSender sender,
             String[] args
     ) {
-        if (args.length < 2) {
+        if (args.length != 1) {
+
             sender.sendMessage(
-                    "Usage : /rpg dialog addline <key> <text>"
+                    "Usage : /rpg dialog delete <dialogueKey>"
             );
 
             return false;
         }
 
-        String key =
-                args[0];
-
-        StringBuilder text =
-                new StringBuilder();
-
-        for (int i = 1; i < args.length; i++) {
-
-            if (i > 1) {
-                text.append(" ");
-            }
-
-            text.append(args[i]);
-        }
-
         CommandResult result =
-                dialogueService.addLine(
-                        key,
-                        text.toString()
+                dialogueService.delete(
+                        args[0]
                 );
 
         sender.sendMessage(

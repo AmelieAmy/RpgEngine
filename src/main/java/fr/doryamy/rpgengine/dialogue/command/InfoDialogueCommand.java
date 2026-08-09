@@ -1,18 +1,16 @@
 package fr.doryamy.rpgengine.dialogue.command;
 
 import fr.doryamy.rpgengine.command.RpgSubcommand;
-import fr.doryamy.rpgengine.dialogue.Dialogue;
-import fr.doryamy.rpgengine.dialogue.DialogueLine;
-import fr.doryamy.rpgengine.dialogue.DialogueService;
+import fr.doryamy.rpgengine.dialogue.*;
 import org.bukkit.command.CommandSender;
 
 import java.util.Optional;
 
 /**
- * Affiche les informations détaillées d'un dialogue.
+ * Affiche les informations détaillées
+ * d'un dialogue.
  *
  * Syntaxe :
- *
  * /rpg dialog info <key>
  */
 public final class InfoDialogueCommand
@@ -20,11 +18,6 @@ public final class InfoDialogueCommand
 
     private final DialogueService dialogueService;
 
-    /**
-     * Construit la commande.
-     *
-     * @param dialogueService service des dialogues
-     */
     public InfoDialogueCommand(
             DialogueService dialogueService
     ) {
@@ -50,10 +43,13 @@ public final class InfoDialogueCommand
             return false;
         }
 
-        String key = args[0];
+        String key =
+                args[0];
 
         Optional<Dialogue> result =
-                dialogueService.find(key);
+                dialogueService.find(
+                        key
+                );
 
         if (result.isEmpty()) {
             sender.sendMessage(
@@ -81,38 +77,73 @@ public final class InfoDialogueCommand
                         + dialogue.getName()
         );
 
+        sender.sendMessage(
+                "Node de départ : "
+                        + (
+                        dialogue.getStartNodeKey() != null
+                                ? dialogue.getStartNodeKey()
+                                : "<non défini>"
+                )
+        );
+
         sender.sendMessage("");
 
-        if (dialogue.getLines().isEmpty()) {
+        sender.sendMessage(
+                "Nodes : "
+                        + dialogue.getNodes().size()
+        );
+
+        for (DialogueNode node :
+                dialogue.getNodes()) {
 
             sender.sendMessage(
-                    "Aucune ligne."
+                    "- "
+                            + node.getKey()
+                            + " : "
+                            + node.getText()
             );
-
-        } else {
-
-            sender.sendMessage(
-                    "Lignes :"
-            );
-
-            for (DialogueLine line :
-                    dialogue.getLines()) {
-
-                sender.sendMessage(
-                        line.getPosition()
-                                + " | "
-                                + line.getText()
-                );
-            }
         }
 
         sender.sendMessage("");
 
         sender.sendMessage(
-                "Total : "
-                        + dialogue.getLines().size()
-                        + " ligne(s)"
+                "Transitions : "
+                        + dialogue.getTransitions().size()
         );
+
+        for (DialogueTransition transition :
+                dialogue.getTransitions()) {
+
+            String target =
+                    transition.getType()
+                            == DialogueTransitionType.END
+                            ? "END"
+                            : (
+                            transition.getTargetNodeKey() != null
+                                    ? transition.getTargetNodeKey()
+                                    : "<cible absente>"
+                    );
+
+            String label =
+                    transition.getLabel() != null
+                            ? " | \"" + transition.getLabel() + "\""
+                            : "";
+
+            sender.sendMessage(
+                    "- "
+                            + transition.getKey()
+                            + " | pos="
+                            + transition.getPosition()
+                            + " | "
+                            + transition.getSourceNodeKey()
+                            + " -> "
+                            + target
+                            + " ["
+                            + transition.getType()
+                            + "]"
+                            + label
+            );
+        }
 
         sender.sendMessage(
                 "------------------------------"

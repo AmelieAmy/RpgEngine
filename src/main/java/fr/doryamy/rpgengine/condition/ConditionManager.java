@@ -3,13 +3,14 @@ package fr.doryamy.rpgengine.condition;
 import fr.doryamy.rpgengine.condition.expression.Expression;
 import fr.doryamy.rpgengine.condition.expression.ExpressionEvaluator;
 import fr.doryamy.rpgengine.condition.expression.ExpressionParser;
-import fr.doryamy.rpgengine.trigger.TriggerContext;
 import fr.doryamy.rpgengine.model.Condition;
+import fr.doryamy.rpgengine.trigger.TriggerContext;
 import fr.doryamy.rpgengine.util.RpgLogger;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Orchestre l'évaluation des conditions d'une règle.
@@ -36,9 +37,25 @@ public final class ConditionManager {
     private final ExpressionParser parser;
     private final ExpressionEvaluator evaluator;
 
-    public ConditionManager() {
-        this.parser = new ExpressionParser();
-        this.evaluator = new ExpressionEvaluator();
+    /**
+     * Construit le manager de conditions.
+     *
+     * @param parser analyseur des expressions
+     * @param evaluator évaluateur des expressions
+     */
+    public ConditionManager(
+            ExpressionParser parser,
+            ExpressionEvaluator evaluator
+    ) {
+        this.parser = Objects.requireNonNull(
+                parser,
+                "ExpressionParser ne peut pas être null."
+        );
+
+        this.evaluator = Objects.requireNonNull(
+                evaluator,
+                "ExpressionEvaluator ne peut pas être null."
+        );
     }
 
     /**

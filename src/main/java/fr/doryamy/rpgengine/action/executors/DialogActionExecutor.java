@@ -40,7 +40,8 @@ public final class DialogActionExecutor
             TriggerContext context,
             Action action
     ) {
-        String dialogueKey = action.getExpression();
+        String dialogueKey =
+                action.getExpression();
 
         Optional<Dialogue> result =
                 repository.findByKey(
@@ -48,15 +49,17 @@ public final class DialogActionExecutor
                 );
 
         if (result.isEmpty()) {
+
             RpgLogger.error(
                     "Dialogue inconnu : "
                             + dialogueKey
             );
+
             return;
         }
 
-        dialogueRunner.play(
-                context.getPlayer(),
+        dialogueRunner.start(
+                context,
                 result.get()
         );
     }

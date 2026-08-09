@@ -4,9 +4,9 @@ import fr.doryamy.rpgengine.action.ActionExecutor;
 import fr.doryamy.rpgengine.action.assignment.Assignment;
 import fr.doryamy.rpgengine.action.assignment.AssignmentExecutor;
 import fr.doryamy.rpgengine.action.assignment.AssignmentParser;
-import fr.doryamy.rpgengine.trigger.TriggerContext;
 import fr.doryamy.rpgengine.model.Action;
 import fr.doryamy.rpgengine.repository.PlayerVariableRepository;
+import fr.doryamy.rpgengine.trigger.TriggerContext;
 import fr.doryamy.rpgengine.util.RpgLogger;
 import org.bukkit.entity.Player;
 
