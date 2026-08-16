@@ -6,7 +6,10 @@ package fr.doryamy.rpgengine.dialogue;
 public enum DialogueTransitionType {
 
     /**
-     * Transition automatique vers un autre node.
+     * Transition sans décision narrative.
+     * Son déclenchement peut dépendre de la présentation :
+     * une confirmation CONTINUE du joueur peut être attendue,
+     * ou la transition peut être automatique.
      */
     AUTO,
 

@@ -10,7 +10,7 @@ import org.bukkit.entity.Player;
 import java.util.Optional;
 
 /**
- * Prévisualise le node de départ d'un dialogue pour le joueur ayant exécuté la commande.
+ * Prévisualise le node de départ d'un dialogue.
  *
  * Cette commande est destinée à l'administration.
  * Elle ne crée aucune DialogueSession et n'exécute ni conditions ni actions.

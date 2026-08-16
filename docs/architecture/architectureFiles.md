@@ -15,16 +15,19 @@ src
                             AssignmentExecutor.java
                             AssignmentOperator.java
                             AssignmentParser.java
-                        command
-                            CommandManager.java
-                            RpgCommand.java
-                            RpgSubcommand.java
                         executors
                             DialogActionExecutor.java
                             MessageActionExecutor.java
                             PlayerVariableActionExecutor.java
                         ActionExecutor.java
                         ActionManager.java
+                    bridge
+                        NeoForgeBridge.java
+                    command
+                        CommandManager.java
+                        CommandResult.java
+                        RpgCommand.java
+                        RpgSubcommand.java
                     condition
                         expression
                             ComparisonOperator.java
@@ -54,7 +57,6 @@ src
                             AddTransitionActionDialogueCommand.java
                             AddTransitionConditionDialogueCommand.java
                             AddTransitionDialogueCommand.java
-                            ChooseDialogueCommand.java
                             CreateDialogueCommand.java
                             DeleteDialogueCommand.java
                             InfoDialogueCommand.java
@@ -67,6 +69,13 @@ src
                             SetStartNodeDialogueCommand.java
                             SetTransitionDialogueCommand.java
                             UpdateNodeTextDialogueCommand.java
+                        presentation
+                            DialogueChoiceView.java
+                            DialogueInteractionType.java
+                            DialoguePresenter.java
+                            DialogueView.java
+                            ModdedDialoguePresenter.java
+                            VanillaDialoguePresenter.java
                         Dialogue.java
                         DialogueNavigator.java
                         DialogueNode.java

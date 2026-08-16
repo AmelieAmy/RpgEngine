@@ -11,10 +11,6 @@ import org.bukkit.command.CommandSender;
  * Syntaxe :
  * /rpg dialog transition action add
  * <dialogueKey> <transitionKey> <provider> <expression>
- *
- * Exemple :
- * /rpg dialog transition action add
- * chief_chickens quest_accept PLAYER chickens_quest=started
  */
 public final class AddTransitionActionDialogueCommand
         implements RpgSubcommand {

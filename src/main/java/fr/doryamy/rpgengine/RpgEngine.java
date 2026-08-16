@@ -4,6 +4,7 @@ import fr.doryamy.rpgengine.action.ActionManager;
 import fr.doryamy.rpgengine.action.executors.DialogActionExecutor;
 import fr.doryamy.rpgengine.action.executors.MessageActionExecutor;
 import fr.doryamy.rpgengine.action.executors.PlayerVariableActionExecutor;
+import fr.doryamy.rpgengine.bridge.NeoForgeBridge;
 import fr.doryamy.rpgengine.command.CommandManager;
 import fr.doryamy.rpgengine.command.RpgCommand;
 import fr.doryamy.rpgengine.condition.ConditionManager;
@@ -13,6 +14,8 @@ import fr.doryamy.rpgengine.condition.providers.PlayerConditionProvider;
 import fr.doryamy.rpgengine.database.DatabaseManager;
 import fr.doryamy.rpgengine.dialogue.*;
 import fr.doryamy.rpgengine.dialogue.command.*;
+import fr.doryamy.rpgengine.dialogue.presentation.DialoguePresenter;
+import fr.doryamy.rpgengine.dialogue.presentation.ModdedDialoguePresenter;
 import fr.doryamy.rpgengine.listener.NPCListener;
 import fr.doryamy.rpgengine.repository.PlayerVariableRepository;
 import fr.doryamy.rpgengine.trigger.TriggerManager;
@@ -28,16 +31,16 @@ import org.bukkit.plugin.java.JavaPlugin;
  * des différents composants du moteur.
  *
  * Elle est responsable de l'initialisation :
- * - de la configuration ;
- * - de la base de données ;
- * - des repositories ;
- * - des services ;
- * - des composants runtime ;
- * - des managers ;
- * - des providers ;
- * - des executors ;
- * - des commandes ;
- * - des listeners.
+ *     de la configuration,
+ *     de la base de données,
+ *     des repositories,
+ *     des services,
+ *     des composants runtime,
+ *     des managers,
+ *     des providers,
+ *     des executors,
+ *     des commandes,
+ *     des listeners.
  *
  * Elle ne contient aucune logique métier.
  */
@@ -48,6 +51,7 @@ public final class RpgEngine extends JavaPlugin {
     private DatabaseManager databaseManager;
     private TriggerManager triggerManager;
     private DialogueService dialogueService;
+    private NeoForgeBridge neoForgeBridge;
 
     @Override
     public void onEnable() {
@@ -98,6 +102,18 @@ public final class RpgEngine extends JavaPlugin {
                 createActionManager();
 
         /*
+         * Bridge NeoForge
+         *
+         * Le bridge est initialisé avant la création
+         * du presenter puis reçoit le DialogueRunner
+         * une fois le runtime complètement construit.
+         */
+        neoForgeBridge =
+                new NeoForgeBridge();
+
+        neoForgeBridge.initialize();
+
+        /*
          * Runtime des dialogues
          */
         DialogueValidator dialogueValidator =
@@ -111,13 +127,23 @@ public final class RpgEngine extends JavaPlugin {
         DialogueSessionManager dialogueSessionManager =
                 createDialogueSessionManager();
 
+        DialoguePresenter dialoguePresenter =
+                createDialoguePresenter(
+                        neoForgeBridge
+                );
+
         DialogueRunner dialogueRunner =
                 createDialogueRunner(
                         dialogueValidator,
                         dialogueNavigator,
                         dialogueSessionManager,
-                        actionManager
+                        actionManager,
+                        dialoguePresenter
                 );
+
+        neoForgeBridge.setDialogueRunner(
+                dialogueRunner
+        );
 
         /*
          * Executors
@@ -167,6 +193,10 @@ public final class RpgEngine extends JavaPlugin {
 
     @Override
     public void onDisable() {
+
+        if (neoForgeBridge != null) {
+            neoForgeBridge.shutdown();
+        }
 
         if (databaseManager != null) {
             databaseManager.close();
@@ -231,6 +261,7 @@ public final class RpgEngine extends JavaPlugin {
      * Crée le service métier des dialogues.
      *
      * @param dialogueRepository repository des dialogues
+     * @param expressionParser parser des expressions
      *
      * @return service configuré
      */
@@ -246,10 +277,29 @@ public final class RpgEngine extends JavaPlugin {
     }
 
     /**
+     * Crée la couche de présentation des dialogues
+     * utilisant l'interface cliente NeoForge.
+     *
+     * @param neoForgeBridge bridge vers le mod RPGEngine
+     *
+     * @return presenter configuré
+     */
+    private DialoguePresenter createDialoguePresenter(
+            NeoForgeBridge neoForgeBridge
+    ) {
+
+        return new ModdedDialoguePresenter(
+                neoForgeBridge
+        );
+    }
+
+    /**
      * Crée et configure le système de conditions.
      *
      * @param playerVariableRepository repository
      *                                 des variables joueur
+     * @param expressionParser parser des expressions
+     * @param expressionEvaluator évaluateur des expressions
      *
      * @return ConditionManager configuré
      */
@@ -334,6 +384,7 @@ public final class RpgEngine extends JavaPlugin {
      * @param dialogueNavigator navigateur des dialogues
      * @param dialogueSessionManager gestionnaire des sessions
      * @param actionManager système d'actions
+     * @param dialoguePresenter présentation des dialogues
      *
      * @return DialogueRunner configuré
      */
@@ -341,14 +392,16 @@ public final class RpgEngine extends JavaPlugin {
             DialogueValidator dialogueValidator,
             DialogueNavigator dialogueNavigator,
             DialogueSessionManager dialogueSessionManager,
-            ActionManager actionManager
+            ActionManager actionManager,
+            DialoguePresenter dialoguePresenter
     ) {
 
         return new DialogueRunner(
                 dialogueValidator,
                 dialogueNavigator,
                 dialogueSessionManager,
-                actionManager
+                actionManager,
+                dialoguePresenter
         );
     }
 
@@ -410,10 +463,15 @@ public final class RpgEngine extends JavaPlugin {
 
     /**
      * Crée et configure le système
-     * de commandes administrateur.
+     * de commandes d'administration.
      *
-     * @param dialogueService service des dialogues
-     * @param dialogueRunner runtime des dialogues
+     * Les anciennes commandes runtime
+     * {@code dialog continue}, {@code dialog choose}
+     * et {@code dialog finish} ne sont plus enregistrées :
+     * ces interactions passent désormais par le mod client.
+     *
+     * @param dialogueService service d'administration des dialogues
+     * @param dialogueRunner runtime utilisé par la prévisualisation
      *
      * @return CommandManager configuré
      */
@@ -422,10 +480,12 @@ public final class RpgEngine extends JavaPlugin {
             DialogueRunner dialogueRunner
     ) {
 
-        /********** Dialog commands ***********/
-
         CommandManager commandManager =
                 new CommandManager();
+
+        /*
+         * Dialogues
+         */
 
         commandManager.register(
                 new CreateDialogueCommand(
@@ -452,12 +512,15 @@ public final class RpgEngine extends JavaPlugin {
         );
 
         commandManager.register(
-                new ChooseDialogueCommand(
+                new PreviewDialogueCommand(
+                        dialogueService,
                         dialogueRunner
                 )
         );
 
-        /********** Node Dialogue commands ***********/
+        /*
+         * Nodes
+         */
 
         commandManager.register(
                 new AddNodeDialogueCommand(
@@ -477,16 +540,9 @@ public final class RpgEngine extends JavaPlugin {
                 )
         );
 
-        /********** Preview Dialogue commands ***********/
-
-        commandManager.register(
-                new PreviewDialogueCommand(
-                        dialogueService,
-                        dialogueRunner
-                )
-        );
-
-        /********** Transition Dialogue commands ***********/
+        /*
+         * Transitions
+         */
 
         commandManager.register(
                 new AddTransitionDialogueCommand(
@@ -500,7 +556,9 @@ public final class RpgEngine extends JavaPlugin {
                 )
         );
 
-        /********** Transition Action Dialogue commands ***********/
+        /*
+         * Actions de transition
+         */
 
         commandManager.register(
                 new AddTransitionActionDialogueCommand(
@@ -520,7 +578,9 @@ public final class RpgEngine extends JavaPlugin {
                 )
         );
 
-        /********** Transition Condition Dialogue commands ***********/
+        /*
+         * Conditions de transition
+         */
 
         commandManager.register(
                 new AddTransitionConditionDialogueCommand(
@@ -554,7 +614,9 @@ public final class RpgEngine extends JavaPlugin {
     ) {
 
         PluginCommand command =
-                getCommand("rpg");
+                getCommand(
+                        "rpg"
+                );
 
         if (command == null) {
 
