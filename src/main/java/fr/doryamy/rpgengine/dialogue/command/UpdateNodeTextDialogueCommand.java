@@ -5,6 +5,8 @@ import fr.doryamy.rpgengine.command.RpgSubcommand;
 import fr.doryamy.rpgengine.dialogue.DialogueService;
 import org.bukkit.command.CommandSender;
 
+import java.util.Arrays;
+
 /**
  * Modifie le texte d'un node existant.
  *
@@ -54,25 +56,21 @@ public final class UpdateNodeTextDialogueCommand
         String nodeKey =
                 args[1];
 
-        StringBuilder text =
-                new StringBuilder();
-
-        for (int i = 2; i < args.length; i++) {
-
-            if (i > 2) {
-                text.append(" ");
-            }
-
-            text.append(
-                    args[i]
-            );
-        }
+        String text =
+                String.join(
+                        " ",
+                        Arrays.copyOfRange(
+                                args,
+                                2,
+                                args.length
+                        )
+                );
 
         CommandResult result =
                 dialogueService.updateNodeText(
                         dialogueKey,
                         nodeKey,
-                        text.toString()
+                        text
                 );
 
         sender.sendMessage(

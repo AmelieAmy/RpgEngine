@@ -4,50 +4,71 @@ import fr.doryamy.rpgengine.action.ActionManager;
 import fr.doryamy.rpgengine.action.executors.DialogActionExecutor;
 import fr.doryamy.rpgengine.action.executors.MessageActionExecutor;
 import fr.doryamy.rpgengine.action.executors.PlayerVariableActionExecutor;
+import fr.doryamy.rpgengine.action.executors.QuestActionExecutor;
 import fr.doryamy.rpgengine.bridge.NeoForgeBridge;
 import fr.doryamy.rpgengine.command.CommandManager;
+import fr.doryamy.rpgengine.command.CommandResult;
 import fr.doryamy.rpgengine.command.RpgCommand;
 import fr.doryamy.rpgengine.condition.ConditionManager;
 import fr.doryamy.rpgengine.condition.expression.ExpressionEvaluator;
 import fr.doryamy.rpgengine.condition.expression.ExpressionParser;
 import fr.doryamy.rpgengine.condition.providers.PlayerConditionProvider;
+import fr.doryamy.rpgengine.condition.providers.QuestConditionProvider;
 import fr.doryamy.rpgengine.database.DatabaseManager;
 import fr.doryamy.rpgengine.dialogue.*;
 import fr.doryamy.rpgengine.dialogue.command.*;
+import fr.doryamy.rpgengine.dialogue.editor.DialogueEditorService;
+import fr.doryamy.rpgengine.dialogue.editor.DialogueScenarioService;
+import fr.doryamy.rpgengine.dialogue.editor.SwitchDialogueEditorStateRequest;
 import fr.doryamy.rpgengine.dialogue.presentation.DialoguePresenter;
 import fr.doryamy.rpgengine.dialogue.presentation.ModdedDialoguePresenter;
 import fr.doryamy.rpgengine.listener.NPCListener;
+import fr.doryamy.rpgengine.quest.QuestService;
+import fr.doryamy.rpgengine.quest.ftb.FtbQuestService;
+import fr.doryamy.rpgengine.repository.ActionRepository;
+import fr.doryamy.rpgengine.repository.ConditionRepository;
 import fr.doryamy.rpgengine.repository.PlayerVariableRepository;
+import fr.doryamy.rpgengine.repository.TriggerRepository;
 import fr.doryamy.rpgengine.trigger.TriggerManager;
+import fr.doryamy.rpgengine.trigger.TriggerService;
 import fr.doryamy.rpgengine.util.RpgLogger;
 import org.bukkit.Bukkit;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.sql.Connection;
+
 /**
  * Point d'entrée principal de RPGEngine.
  *
- * Cette classe constitue le point de composition
- * des différents composants du moteur.
+ * <p>Cette classe constitue le composition root
+ * de l'application.
  *
- * Elle est responsable de l'initialisation :
- *     de la configuration,
- *     de la base de données,
- *     des repositories,
- *     des services,
- *     des composants runtime,
- *     des managers,
- *     des providers,
- *     des executors,
- *     des commandes,
- *     des listeners.
+ * <p>Elle est responsable de la création et du câblage :
  *
- * Elle ne contient aucune logique métier.
+ * <ul>
+ *     <li>de la configuration ;</li>
+ *     <li>de la base de données ;</li>
+ *     <li>des repositories ;</li>
+ *     <li>des services ;</li>
+ *     <li>des composants runtime ;</li>
+ *     <li>des managers ;</li>
+ *     <li>des providers ;</li>
+ *     <li>des executors ;</li>
+ *     <li>des commandes ;</li>
+ *     <li>des listeners.</li>
+ * </ul>
+ *
+ * <p>Elle ne contient aucune logique métier.
  */
 public final class RpgEngine extends JavaPlugin {
 
     private static RpgEngine instance;
 
+    /*
+     * Composants conservés pendant toute
+     * la durée de vie du plugin.
+     */
     private DatabaseManager databaseManager;
     private TriggerManager triggerManager;
     private DialogueService dialogueService;
@@ -56,23 +77,55 @@ public final class RpgEngine extends JavaPlugin {
     @Override
     public void onEnable() {
 
-        instance = this;
+        instance =
+                this;
 
         initializeConfiguration();
+
         initializeDatabase();
 
+        Connection connection =
+                databaseManager.getConnection();
+
         /*
+         * ====================================================
          * Repositories
+         * ====================================================
          */
+
         PlayerVariableRepository playerVariableRepository =
-                createPlayerVariableRepository();
+                new PlayerVariableRepository(
+                        connection
+                );
+
+        ActionRepository actionRepository =
+                new ActionRepository(
+                        connection
+                );
+
+        ConditionRepository conditionRepository =
+                new ConditionRepository(
+                        connection
+                );
+
+        TriggerRepository triggerRepository =
+                new TriggerRepository(
+                        connection,
+                        actionRepository,
+                        conditionRepository
+                );
 
         DialogueRepository dialogueRepository =
-                createDialogueRepository();
+                new DialogueRepository(
+                        connection
+                );
 
         /*
+         * ====================================================
          * Expression Engine
+         * ====================================================
          */
+
         ExpressionParser expressionParser =
                 new ExpressionParser();
 
@@ -80,60 +133,127 @@ public final class RpgEngine extends JavaPlugin {
                 new ExpressionEvaluator();
 
         /*
+         * ====================================================
          * Services métier
+         * ====================================================
          */
+
         dialogueService =
-                createDialogueService(
+                new DialogueService(
                         dialogueRepository,
                         expressionParser
                 );
 
+        TriggerService triggerService =
+                new TriggerService(
+                        triggerRepository,
+                        conditionRepository,
+                        actionRepository
+                );
+
+        DialogueScenarioService dialogueScenarioService =
+                new DialogueScenarioService(
+                        dialogueService,
+                        triggerRepository,
+                        triggerService
+                );
+
         /*
+         * ====================================================
          * Rule Engine
+         * ====================================================
          */
+
         ConditionManager conditionManager =
-                createConditionManager(
-                        playerVariableRepository,
+                new ConditionManager(
                         expressionParser,
                         expressionEvaluator
                 );
 
+        conditionManager.register(
+                new PlayerConditionProvider(
+                        playerVariableRepository
+                )
+        );
+
         ActionManager actionManager =
-                createActionManager();
+                new ActionManager();
 
         /*
+         * ====================================================
          * Bridge NeoForge
-         *
-         * Le bridge est initialisé avant la création
-         * du presenter puis reçoit le DialogueRunner
-         * une fois le runtime complètement construit.
+         * ====================================================
          */
+
         neoForgeBridge =
                 new NeoForgeBridge();
 
-        neoForgeBridge.initialize();
+        boolean bridgeInitialized =
+                neoForgeBridge.initialize();
+
+        if (!bridgeInitialized) {
+
+            RpgLogger.error(
+                    "Le bridge NeoForge n'a pas pu être initialisé."
+            );
+        }
 
         /*
-         * Runtime des dialogues
+         * ====================================================
+         * Quest integration
+         * ====================================================
          */
+
+        QuestService questService =
+                new FtbQuestService(
+                        neoForgeBridge
+                );
+
+        /*
+         * L'éditeur a besoin du QuestService afin de
+         * résoudre les noms affichables des quêtes et
+         * de formater les actions liées aux quêtes.
+         *
+         * Il est donc construit seulement après
+         * l'initialisation du bridge et du QuestService.
+         */
+        DialogueEditorService dialogueEditorService =
+                new DialogueEditorService(
+                        dialogueService,
+                        triggerRepository,
+                        questService
+                );
+
+        conditionManager.register(
+                new QuestConditionProvider(
+                        questService
+                )
+        );
+
+        /*
+         * ====================================================
+         * Runtime des dialogues
+         * ====================================================
+         */
+
         DialogueValidator dialogueValidator =
-                createDialogueValidator();
+                new DialogueValidator();
 
         DialogueNavigator dialogueNavigator =
-                createDialogueNavigator(
+                new DialogueNavigator(
                         conditionManager
                 );
 
         DialogueSessionManager dialogueSessionManager =
-                createDialogueSessionManager();
+                new DialogueSessionManager();
 
         DialoguePresenter dialoguePresenter =
-                createDialoguePresenter(
+                new ModdedDialoguePresenter(
                         neoForgeBridge
                 );
 
         DialogueRunner dialogueRunner =
-                createDialogueRunner(
+                new DialogueRunner(
                         dialogueValidator,
                         dialogueNavigator,
                         dialogueSessionManager,
@@ -141,40 +261,161 @@ public final class RpgEngine extends JavaPlugin {
                         dialoguePresenter
                 );
 
+        /*
+         * Le runtime est maintenant entièrement construit.
+         * Il peut être branché au bridge.
+         */
         neoForgeBridge.setDialogueRunner(
                 dialogueRunner
         );
 
         /*
+         * ====================================================
+         * Callbacks de l'éditeur
+         * ====================================================
+         */
+
+        neoForgeBridge.setDialogueEditorRequestHandler(
+                (playerUuid, dialogueKey) ->
+
+                        dialogueEditorService
+                                .buildView(
+                                        dialogueKey
+                                )
+                                .ifPresent(
+                                        view ->
+                                                neoForgeBridge
+                                                        .showDialogueEditor(
+                                                                playerUuid,
+                                                                view
+                                                        )
+                                )
+        );
+
+
+        neoForgeBridge.setDialogueEditorStateSwitchHandler(
+                (playerUuid, request) ->
+
+                        dialogueEditorService
+                                .switchState(
+                                        request.dialogueKey(),
+                                        request.targetState()
+                                )
+                                .ifPresentOrElse(
+                                        view ->
+                                                neoForgeBridge
+                                                        .showDialogueEditor(
+                                                                playerUuid,
+                                                                view
+                                                        ),
+                                        () ->
+                                                RpgLogger.error(
+                                                        "Impossible de charger la variante "
+                                                                + request.targetState()
+                                                                + " pour le dialogue "
+                                                                + request.dialogueKey()
+                                                )
+                                )
+        );
+
+        neoForgeBridge.setDialogueScenarioDeleteHandler(
+                (playerUuid, dialogueKey) -> {
+
+                    boolean deleted =
+                            dialogueScenarioService.deleteScenario(
+                                    dialogueKey
+                            );
+
+                    if (!deleted) {
+
+                        RpgLogger.error(
+                                "Impossible de supprimer le scénario : "
+                                        + dialogueKey
+                        );
+
+                        return;
+                    }
+
+                    neoForgeBridge.showDialogueManager(
+                            playerUuid,
+                            dialogueEditorService.findScenarios()
+                    );
+                }
+        );
+
+        neoForgeBridge.setDialogueScenarioCreateHandler(
+                (playerUuid, request) -> {
+
+                    CommandResult result =
+                            dialogueScenarioService.createScenario(
+                                    request
+                            );
+
+                    if (!result.isSuccess()) {
+
+                        RpgLogger.error(
+                                "Impossible de créer le scénario : "
+                                        + result.getMessage()
+                        );
+
+                        return;
+                    }
+
+                    /*
+                     * La création ayant réussi,
+                     * on renvoie immédiatement la liste
+                     * reconstruite depuis la base.
+                     */
+                    neoForgeBridge.showDialogueManager(
+                            playerUuid,
+                            dialogueEditorService.findScenarios()
+                    );
+                }
+        );
+
+        /*
+         * ====================================================
          * Executors
+         * ====================================================
          *
          * Ils sont enregistrés après la création
-         * du DialogueRunner afin d'éviter une
-         * dépendance circulaire de construction.
+         * du DialogueRunner afin d'éviter une dépendance
+         * circulaire de construction.
          */
+
         registerActionExecutors(
                 actionManager,
                 playerVariableRepository,
                 dialogueRepository,
-                dialogueRunner
+                dialogueRunner,
+                questService
         );
 
         /*
+         * ====================================================
          * Trigger Engine
+         * ====================================================
          */
+
         triggerManager =
-                createTriggerManager(
+                new TriggerManager(
+                        triggerRepository,
                         conditionManager,
                         actionManager
                 );
 
         /*
+         * ====================================================
          * Administration
+         * ====================================================
          */
+
         CommandManager commandManager =
                 createCommandManager(
                         dialogueService,
-                        dialogueRunner
+                        dialogueRunner,
+                        dialogueEditorService,
+                        neoForgeBridge
                 );
 
         registerCommands(
@@ -182,8 +423,11 @@ public final class RpgEngine extends JavaPlugin {
         );
 
         /*
+         * ====================================================
          * Adaptateurs externes
+         * ====================================================
          */
+
         registerListeners();
 
         RpgLogger.info(
@@ -194,11 +438,18 @@ public final class RpgEngine extends JavaPlugin {
     @Override
     public void onDisable() {
 
+        /*
+         * Le bridge est fermé avant la base de données
+         * afin de libérer les callbacks conservés
+         * par le ClassLoader NeoForge.
+         */
         if (neoForgeBridge != null) {
+
             neoForgeBridge.shutdown();
         }
 
         if (databaseManager != null) {
+
             databaseManager.close();
         }
 
@@ -206,7 +457,8 @@ public final class RpgEngine extends JavaPlugin {
                 "RPGEngine arrêté."
         );
 
-        instance = null;
+        instance =
+                null;
     }
 
     /**
@@ -227,182 +479,11 @@ public final class RpgEngine extends JavaPlugin {
     private void initializeDatabase() {
 
         databaseManager =
-                new DatabaseManager(this);
-
-        databaseManager.connect();
-    }
-
-    /**
-     * Crée le repository des variables joueur.
-     *
-     * @return repository configuré
-     */
-    private PlayerVariableRepository
-    createPlayerVariableRepository() {
-
-        return new PlayerVariableRepository(
-                databaseManager.getConnection()
-        );
-    }
-
-    /**
-     * Crée le repository des dialogues.
-     *
-     * @return repository configuré
-     */
-    private DialogueRepository createDialogueRepository() {
-
-        return new DialogueRepository(
-                databaseManager.getConnection()
-        );
-    }
-
-    /**
-     * Crée le service métier des dialogues.
-     *
-     * @param dialogueRepository repository des dialogues
-     * @param expressionParser parser des expressions
-     *
-     * @return service configuré
-     */
-    private DialogueService createDialogueService(
-            DialogueRepository dialogueRepository,
-            ExpressionParser expressionParser
-    ) {
-
-        return new DialogueService(
-                dialogueRepository,
-                expressionParser
-        );
-    }
-
-    /**
-     * Crée la couche de présentation des dialogues
-     * utilisant l'interface cliente NeoForge.
-     *
-     * @param neoForgeBridge bridge vers le mod RPGEngine
-     *
-     * @return presenter configuré
-     */
-    private DialoguePresenter createDialoguePresenter(
-            NeoForgeBridge neoForgeBridge
-    ) {
-
-        return new ModdedDialoguePresenter(
-                neoForgeBridge
-        );
-    }
-
-    /**
-     * Crée et configure le système de conditions.
-     *
-     * @param playerVariableRepository repository
-     *                                 des variables joueur
-     * @param expressionParser parser des expressions
-     * @param expressionEvaluator évaluateur des expressions
-     *
-     * @return ConditionManager configuré
-     */
-    private ConditionManager createConditionManager(
-            PlayerVariableRepository playerVariableRepository,
-            ExpressionParser expressionParser,
-            ExpressionEvaluator expressionEvaluator
-    ) {
-
-        ConditionManager conditionManager =
-                new ConditionManager(
-                        expressionParser,
-                        expressionEvaluator
+                new DatabaseManager(
+                        this
                 );
 
-        conditionManager.register(
-                new PlayerConditionProvider(
-                        playerVariableRepository
-                )
-        );
-
-        return conditionManager;
-    }
-
-    /**
-     * Crée le système d'actions.
-     *
-     * Les executors sont enregistrés séparément
-     * après la création du runtime des dialogues.
-     *
-     * @return ActionManager vide
-     */
-    private ActionManager createActionManager() {
-
-        return new ActionManager();
-    }
-
-    /**
-     * Crée le validateur structurel
-     * des graphes de dialogue.
-     *
-     * @return validateur configuré
-     */
-    private DialogueValidator createDialogueValidator() {
-
-        return new DialogueValidator();
-    }
-
-    /**
-     * Crée le navigateur utilisé
-     * par le runtime des dialogues.
-     *
-     * @param conditionManager système de conditions
-     *
-     * @return navigateur configuré
-     */
-    private DialogueNavigator createDialogueNavigator(
-            ConditionManager conditionManager
-    ) {
-
-        return new DialogueNavigator(
-                conditionManager
-        );
-    }
-
-    /**
-     * Crée le gestionnaire des sessions
-     * de dialogue actives.
-     *
-     * @return gestionnaire configuré
-     */
-    private DialogueSessionManager
-    createDialogueSessionManager() {
-
-        return new DialogueSessionManager();
-    }
-
-    /**
-     * Crée le runtime des dialogues.
-     *
-     * @param dialogueValidator validateur des dialogues
-     * @param dialogueNavigator navigateur des dialogues
-     * @param dialogueSessionManager gestionnaire des sessions
-     * @param actionManager système d'actions
-     * @param dialoguePresenter présentation des dialogues
-     *
-     * @return DialogueRunner configuré
-     */
-    private DialogueRunner createDialogueRunner(
-            DialogueValidator dialogueValidator,
-            DialogueNavigator dialogueNavigator,
-            DialogueSessionManager dialogueSessionManager,
-            ActionManager actionManager,
-            DialoguePresenter dialoguePresenter
-    ) {
-
-        return new DialogueRunner(
-                dialogueValidator,
-                dialogueNavigator,
-                dialogueSessionManager,
-                actionManager,
-                dialoguePresenter
-        );
+        databaseManager.connect();
     }
 
     /**
@@ -415,12 +496,14 @@ public final class RpgEngine extends JavaPlugin {
      * @param dialogueRepository repository
      *                           des dialogues
      * @param dialogueRunner runtime des dialogues
+     * @param questService service de quêtes
      */
     private void registerActionExecutors(
             ActionManager actionManager,
             PlayerVariableRepository playerVariableRepository,
             DialogueRepository dialogueRepository,
-            DialogueRunner dialogueRunner
+            DialogueRunner dialogueRunner,
+            QuestService questService
     ) {
 
         actionManager.register(
@@ -439,25 +522,11 @@ public final class RpgEngine extends JavaPlugin {
                         dialogueRunner
                 )
         );
-    }
 
-    /**
-     * Crée le manager principal des triggers.
-     *
-     * @param conditionManager système de conditions
-     * @param actionManager système d'actions
-     *
-     * @return TriggerManager configuré
-     */
-    private TriggerManager createTriggerManager(
-            ConditionManager conditionManager,
-            ActionManager actionManager
-    ) {
-
-        return new TriggerManager(
-                databaseManager.getConnection(),
-                conditionManager,
-                actionManager
+        actionManager.register(
+                new QuestActionExecutor(
+                        questService
+                )
         );
     }
 
@@ -465,26 +534,34 @@ public final class RpgEngine extends JavaPlugin {
      * Crée et configure le système
      * de commandes d'administration.
      *
-     * Les anciennes commandes runtime
+     * <p>Les anciennes commandes runtime
      * {@code dialog continue}, {@code dialog choose}
      * et {@code dialog finish} ne sont plus enregistrées :
      * ces interactions passent désormais par le mod client.
      *
-     * @param dialogueService service d'administration des dialogues
-     * @param dialogueRunner runtime utilisé par la prévisualisation
+     * @param dialogueService service d'administration
+     *                        des dialogues
+     * @param dialogueRunner runtime utilisé
+     *                       par la prévisualisation
+     * @param dialogueEditorService service de l'éditeur
+     * @param neoForgeBridge façade vers le mod NeoForge
      *
      * @return CommandManager configuré
      */
     private CommandManager createCommandManager(
             DialogueService dialogueService,
-            DialogueRunner dialogueRunner
+            DialogueRunner dialogueRunner,
+            DialogueEditorService dialogueEditorService,
+            NeoForgeBridge neoForgeBridge
     ) {
 
         CommandManager commandManager =
                 new CommandManager();
 
         /*
+         * ------------------------------------------------
          * Dialogues
+         * ------------------------------------------------
          */
 
         commandManager.register(
@@ -518,8 +595,17 @@ public final class RpgEngine extends JavaPlugin {
                 )
         );
 
+        commandManager.register(
+                new OpenDialogueEditorCommand(
+                        dialogueEditorService,
+                        neoForgeBridge
+                )
+        );
+
         /*
+         * ------------------------------------------------
          * Nodes
+         * ------------------------------------------------
          */
 
         commandManager.register(
@@ -541,7 +627,9 @@ public final class RpgEngine extends JavaPlugin {
         );
 
         /*
+         * ------------------------------------------------
          * Transitions
+         * ------------------------------------------------
          */
 
         commandManager.register(
@@ -557,7 +645,9 @@ public final class RpgEngine extends JavaPlugin {
         );
 
         /*
+         * ------------------------------------------------
          * Actions de transition
+         * ------------------------------------------------
          */
 
         commandManager.register(
@@ -579,7 +669,9 @@ public final class RpgEngine extends JavaPlugin {
         );
 
         /*
+         * ------------------------------------------------
          * Conditions de transition
+         * ------------------------------------------------
          */
 
         commandManager.register(
@@ -649,11 +741,19 @@ public final class RpgEngine extends JavaPlugin {
                 );
     }
 
+    /**
+     * Retourne l'instance courante du plugin.
+     */
     public static RpgEngine getInstance() {
+
         return instance;
     }
 
+    /**
+     * Retourne le manager des triggers.
+     */
     public TriggerManager getTriggerManager() {
+
         return triggerManager;
     }
 
@@ -664,6 +764,7 @@ public final class RpgEngine extends JavaPlugin {
      * @return service des dialogues
      */
     public DialogueService getDialogueService() {
+
         return dialogueService;
     }
 }

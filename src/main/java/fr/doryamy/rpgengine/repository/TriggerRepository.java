@@ -10,18 +10,19 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.OptionalInt;
 
 /**
- * Repository chargé de reconstruire les triggers à partir de la base de données.
+ * Repository chargé de la persistance
+ * et de la reconstruction des triggers.
  *
- * Cette classe est responsable :
- *   de la lecture des triggers ;
- *   du chargement de leurs conditions ;
- *   du chargement de leurs actions.
+ * <p>Les actions et conditions associées sont
+ * chargées via leurs repositories respectifs.
  *
- * Elle ne contient aucune logique métier.
+ * <p>Cette classe ne contient aucune logique métier.
  */
 public final class TriggerRepository {
 
@@ -29,81 +30,325 @@ public final class TriggerRepository {
     private final ActionRepository actionRepository;
     private final ConditionRepository conditionRepository;
 
-    public TriggerRepository(Connection connection) {
-        this.connection = connection;
-        this.actionRepository = new ActionRepository(connection);
-        this.conditionRepository = new ConditionRepository(connection);
+    public TriggerRepository(
+            Connection connection,
+            ActionRepository actionRepository,
+            ConditionRepository conditionRepository
+    ) {
+        this.connection =
+                connection;
+
+        this.actionRepository =
+                actionRepository;
+
+        this.conditionRepository =
+                conditionRepository;
     }
 
     /**
-     * Recherche tous les triggers actifs correspondant
-     * au type et à la cible donnés.
-     *
-     * Les conditions et les actions associées sont chargées automatiquement.
+     * Recherche tous les triggers actifs
+     * correspondant au type et à la cible.
      *
      * @param type type de trigger
      * @param targetId identifiant de la cible
      *
-     * @return liste des triggers correspondants
+     * @return triggers correspondants
      */
     public List<Trigger> find(
             TriggerType type,
             String targetId
     ) {
-        List<Trigger> triggers = new ArrayList<>();
-
         String sql = """
-                SELECT id, name, type, target_id
+                SELECT
+                    id,
+                    name,
+                    type,
+                    target_id
                 FROM trigger
                 WHERE type = ?
-                AND target_id = ?
-                AND enabled = 1
+                  AND target_id = ?
+                  AND enabled = 1
+                ORDER BY id
                 """;
+
+        List<Trigger> triggers =
+                new ArrayList<>();
 
         try (
                 PreparedStatement statement =
-                        connection.prepareStatement(sql)
+                        connection.prepareStatement(
+                                sql
+                        )
         ) {
-            statement.setString(1, type.name());
-            statement.setString(2, targetId);
+            statement.setString(
+                    1,
+                    type.name()
+            );
 
-            try (ResultSet rs = statement.executeQuery()) {
+            statement.setString(
+                    2,
+                    targetId
+            );
 
-                while (rs.next()) {
-                    int triggerId = rs.getInt("id");
-
-                    List<Action> actions =
-                            actionRepository.findByTriggerId(
-                                    triggerId
-                            );
-
-                    List<Condition> conditions =
-                            conditionRepository.findByTriggerId(
-                                    triggerId
-                            );
+            try (
+                    ResultSet result =
+                            statement.executeQuery()
+            ) {
+                while (result.next()) {
 
                     triggers.add(
-                            new Trigger(
-                                    triggerId,
-                                    rs.getString("name"),
-                                    rs.getString("target_id"),
-                                    TriggerType.valueOf(
-                                            rs.getString("type")
-                                    ),
-                                    conditions,
-                                    actions
+                            mapTrigger(
+                                    result
                             )
                     );
                 }
             }
 
         } catch (SQLException e) {
+
             RpgLogger.error(
-                    "Impossible de trouver le trigger "
+                    "Impossible de charger les triggers "
+                            + type
+                            + " / "
+                            + targetId
+                            + " : "
                             + e.getMessage()
             );
         }
 
         return triggers;
+    }
+
+    /**
+     * Retourne tous les triggers actifs.
+     *
+     * <p>Cette méthode est notamment utilisée
+     * par les outils d'administration
+     * et l'éditeur.
+     *
+     * @return tous les triggers actifs
+     */
+    public List<Trigger> findAll() {
+
+        String sql = """
+                SELECT
+                    id,
+                    name,
+                    type,
+                    target_id
+                FROM trigger
+                WHERE enabled = 1
+                ORDER BY id
+                """;
+
+        List<Trigger> triggers =
+                new ArrayList<>();
+
+        try (
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                sql
+                        );
+
+                ResultSet result =
+                        statement.executeQuery()
+        ) {
+            while (result.next()) {
+
+                triggers.add(
+                        mapTrigger(
+                                result
+                        )
+                );
+            }
+
+        } catch (SQLException e) {
+
+            RpgLogger.error(
+                    "Impossible de charger les triggers : "
+                            + e.getMessage()
+            );
+        }
+
+        return triggers;
+    }
+
+    /**
+     * Crée un trigger.
+     *
+     * <p>Les actions et conditions sont créées
+     * séparément par leurs repositories.
+     *
+     * @param name nom du trigger
+     * @param type type du trigger
+     * @param targetId cible du trigger
+     *
+     * @return identifiant généré,
+     *         ou vide en cas d'échec
+     */
+    public OptionalInt create(
+            String name,
+            TriggerType type,
+            String targetId
+    ) {
+        String sql = """
+                INSERT INTO trigger (
+                    name,
+                    type,
+                    target_id,
+                    enabled
+                )
+                VALUES (?, ?, ?, 1)
+                """;
+
+        try (
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                sql,
+                                Statement.RETURN_GENERATED_KEYS
+                        )
+        ) {
+            statement.setString(
+                    1,
+                    name
+            );
+
+            statement.setString(
+                    2,
+                    type.name()
+            );
+
+            statement.setString(
+                    3,
+                    targetId
+            );
+
+            if (statement.executeUpdate()
+                    != 1) {
+
+                return OptionalInt.empty();
+            }
+
+            try (
+                    ResultSet keys =
+                            statement.getGeneratedKeys()
+            ) {
+                if (!keys.next()) {
+
+                    RpgLogger.error(
+                            "Trigger créé mais aucun ID généré : "
+                                    + name
+                    );
+
+                    return OptionalInt.empty();
+                }
+
+                return OptionalInt.of(
+                        keys.getInt(
+                                1
+                        )
+                );
+            }
+
+        } catch (SQLException e) {
+
+            RpgLogger.error(
+                    "Impossible de créer le trigger "
+                            + name
+                            + " : "
+                            + e.getMessage()
+            );
+
+            return OptionalInt.empty();
+        }
+    }
+
+    /**
+     * Supprime un trigger.
+     *
+     * <p>Les actions et conditions associées
+     * sont supprimées par les cascades SQLite.
+     *
+     * @param triggerId identifiant du trigger
+     *
+     * @return true si un trigger a été supprimé
+     */
+    public boolean delete(
+            int triggerId
+    ) {
+        String sql = """
+                DELETE FROM trigger
+                WHERE id = ?
+                """;
+
+        try (
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                sql
+                        )
+        ) {
+            statement.setInt(
+                    1,
+                    triggerId
+            );
+
+            return statement.executeUpdate()
+                    == 1;
+
+        } catch (SQLException e) {
+
+            RpgLogger.error(
+                    "Impossible de supprimer le trigger "
+                            + triggerId
+                            + " : "
+                            + e.getMessage()
+            );
+
+            return false;
+        }
+    }
+
+    /**
+     * Reconstruit un trigger complet
+     * à partir d'une ligne SQL.
+     *
+     * <p>Les actions et conditions associées
+     * sont chargées par leurs repositories.
+     */
+    private Trigger mapTrigger(
+            ResultSet result
+    ) throws SQLException {
+
+        int triggerId =
+                result.getInt(
+                        "id"
+                );
+
+        List<Action> actions =
+                actionRepository.findByTriggerId(
+                        triggerId
+                );
+
+        List<Condition> conditions =
+                conditionRepository.findByTriggerId(
+                        triggerId
+                );
+
+        return new Trigger(
+                triggerId,
+                result.getString(
+                        "name"
+                ),
+                result.getString(
+                        "target_id"
+                ),
+                TriggerType.valueOf(
+                        result.getString(
+                                "type"
+                        )
+                ),
+                conditions,
+                actions
+        );
     }
 }

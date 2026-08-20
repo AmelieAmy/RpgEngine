@@ -5,6 +5,8 @@ import fr.doryamy.rpgengine.command.RpgSubcommand;
 import fr.doryamy.rpgengine.dialogue.DialogueService;
 import org.bukkit.command.CommandSender;
 
+import java.util.Arrays;
+
 /**
  * Ajoute une action à une transition.
  *
@@ -54,26 +56,22 @@ public final class AddTransitionActionDialogueCommand
         String provider =
                 args[2];
 
-        StringBuilder expression =
-                new StringBuilder();
-
-        for (int i = 3; i < args.length; i++) {
-
-            if (i > 3) {
-                expression.append(" ");
-            }
-
-            expression.append(
-                    args[i]
-            );
-        }
+        String expression =
+                String.join(
+                        " ",
+                        Arrays.copyOfRange(
+                                args,
+                                3,
+                                args.length
+                        )
+                );
 
         CommandResult result =
                 dialogueService.addTransitionAction(
                         dialogueKey,
                         transitionKey,
                         provider,
-                        expression.toString()
+                        expression
                 );
 
         sender.sendMessage(

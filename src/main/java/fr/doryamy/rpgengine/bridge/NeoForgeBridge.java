@@ -1,55 +1,76 @@
 package fr.doryamy.rpgengine.bridge;
 
 import fr.doryamy.rpgengine.dialogue.DialogueRunner;
-import fr.doryamy.rpgengine.dialogue.presentation.DialogueChoiceView;
+import fr.doryamy.rpgengine.dialogue.editor.CreateDialogueScenarioRequest;
+import fr.doryamy.rpgengine.dialogue.editor.SwitchDialogueEditorStateRequest;
+import fr.doryamy.rpgengine.dialogue.editor.view.DialogueEditorScenarioSummaryView;
+import fr.doryamy.rpgengine.dialogue.editor.view.DialogueEditorView;
 import fr.doryamy.rpgengine.dialogue.presentation.DialogueView;
 import fr.doryamy.rpgengine.util.RpgLogger;
 
-import java.lang.reflect.Method;
+import java.util.List;
 import java.util.UUID;
 import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 
 /**
- * Bridge entre RPGEngine Plugin et le mod RPGEngine NeoForge.
+ * Façade entre RPGEngine Plugin et le mod RPGEngine NeoForge.
  *
  * <p>Le plugin accède au mod uniquement par réflexion afin
  * de ne conserver aucune dépendance compile-time vers NeoForge.
  *
- * <p>Le bridge assure deux directions :
+ * <p>Les responsabilités spécialisées sont déléguées
+ * à des bridges dédiés :
  *
  * <pre>
- * Plugin → Mod → Client
+ * DialogueRuntimeBridge
  *   showDialogue(...)
  *   dismissDialogue(...)
- *
- * Client → Mod → Plugin
  *   CONTINUE
  *   CHOICE
  *   FINISH
+ *
+ * DialogueEditorBridge
+ *   showDialogueManager(...)
+ *   showDialogueEditor(...)
+ *   ouverture d'un scénario
+ *   suppression d'un scénario
+ *
+ * QuestBridge
+ *   getQuestState(...)
+ *   startQuest(...)
  * </pre>
  *
- * <p>La logique métier reste dans le plugin, notamment dans
- * {@link DialogueRunner}. Le bridge se limite au transport
- * des données et des interactions.
+ * <p>Cette classe constitue uniquement la façade publique
+ * utilisée par le reste du plugin.
+ *
+ * <p>La logique métier reste entièrement dans RPGEngine.
  */
 public final class NeoForgeBridge {
 
     private static final String BRIDGE_CLASS =
             "fr.doryamy.rpgengine.neoforge.bridge.RpgEngineBridgeApi";
 
-    private Method clearDialogueContinueHandlerMethod;
-    private Method clearDialogueChoiceHandlerMethod;
-    private Method clearDialogueFinishHandlerMethod;
+    /*
+     * Runtime des dialogues.
+     */
+    private final DialogueRuntimeBridge dialogueRuntimeBridge =
+            new DialogueRuntimeBridge();
 
-    private Method showDialogueMethod;
-    private Method dismissDialogueMethod;
+    /*
+     * Administration / éditeur de dialogues.
+     */
+    private final DialogueEditorBridge dialogueEditorBridge =
+            new DialogueEditorBridge();
 
-    private DialogueRunner dialogueRunner;
+    /*
+     * Intégration des quêtes.
+     */
+    private final QuestBridge questBridge =
+            new QuestBridge();
 
     /**
-     * Initialise le bridge et enregistre auprès du mod
-     * les callbacks utilisés par le système de dialogue.
+     * Initialise la façade et tous
+     * les bridges spécialisés.
      *
      * @return {@code true} si l'API NeoForge attendue
      *         a été trouvée et initialisée
@@ -63,92 +84,30 @@ public final class NeoForgeBridge {
                     );
 
             /*
-             * Client → serveur : CONTINUE.
+             * ------------------------------------------------
+             * Runtime dialogue
+             * ------------------------------------------------
              */
-            Method registerContinueMethod =
-                    bridgeClass.getMethod(
-                            "registerDialogueContinueHandler",
-                            Consumer.class
-                    );
-
-            clearDialogueContinueHandlerMethod =
-                    bridgeClass.getMethod(
-                            "clearDialogueContinueHandler"
-                    );
-
-            /*
-             * Client → serveur : CHOICE.
-             */
-            Method registerChoiceMethod =
-                    bridgeClass.getMethod(
-                            "registerDialogueChoiceHandler",
-                            BiConsumer.class
-                    );
-
-            clearDialogueChoiceHandlerMethod =
-                    bridgeClass.getMethod(
-                            "clearDialogueChoiceHandler"
-                    );
-
-            /*
-             * Client → serveur : FINISH.
-             */
-            Method registerFinishMethod =
-                    bridgeClass.getMethod(
-                            "registerDialogueFinishHandler",
-                            Consumer.class
-                    );
-
-            clearDialogueFinishHandlerMethod =
-                    bridgeClass.getMethod(
-                            "clearDialogueFinishHandler"
-                    );
-
-            /*
-             * Serveur → client : affichage.
-             */
-            showDialogueMethod =
-                    bridgeClass.getMethod(
-                            "showDialogue",
-                            UUID.class,
-                            String.class,
-                            String.class,
-                            String.class,
-                            int[].class,
-                            String[].class
-                    );
-
-            /*
-             * Serveur → client : fermeture.
-             */
-            dismissDialogueMethod =
-                    bridgeClass.getMethod(
-                            "dismissDialogue",
-                            UUID.class
-                    );
-
-            Consumer<UUID> continueCallback =
-                    this::handleDialogueContinue;
-
-            BiConsumer<UUID, Integer> choiceCallback =
-                    this::handleDialogueChoice;
-
-            Consumer<UUID> finishCallback =
-                    this::handleDialogueFinish;
-
-            registerContinueMethod.invoke(
-                    null,
-                    continueCallback
+            dialogueRuntimeBridge.initialize(
+                    bridgeClass
             );
 
-            registerChoiceMethod.invoke(
-                    null,
-                    choiceCallback
+            /*
+             * ------------------------------------------------
+             * Administration / éditeur
+             * ------------------------------------------------
+             */
+            dialogueEditorBridge.initialize(
+                    bridgeClass
             );
 
-            registerFinishMethod.invoke(
-                    null,
-                    finishCallback
+            /*
+             * ------------------------------------------------
+             * Quêtes
+             * ------------------------------------------------
+             */
+            questBridge.initialize(
+                    bridgeClass
             );
 
             RpgLogger.info(
@@ -164,275 +123,236 @@ public final class NeoForgeBridge {
                             + e.getMessage()
             );
 
+            shutdownAfterInitializationFailure();
+
+            return false;
+
+        } catch (RuntimeException e) {
+
+            RpgLogger.error(
+                    "Erreur inattendue pendant l'initialisation "
+                            + "du bridge NeoForge : "
+                            + e.getClass().getSimpleName()
+                            + " | "
+                            + e.getMessage()
+            );
+
+            shutdownAfterInitializationFailure();
+
             return false;
         }
     }
 
     /**
-     * Branche le runtime des dialogues au bridge.
-     *
-     * <p>Cette méthode est appelée après la création
-     * du {@link DialogueRunner} afin d'éviter une dépendance
-     * circulaire pendant l'initialisation du plugin.
+     * Branche le runtime des dialogues.
      *
      * @param dialogueRunner runtime serveur des dialogues
      */
     public void setDialogueRunner(
             DialogueRunner dialogueRunner
     ) {
-        this.dialogueRunner =
-                dialogueRunner;
+        dialogueRuntimeBridge.setDialogueRunner(
+                dialogueRunner
+        );
+    }
+
+    /**
+     * Définit le traitement des demandes
+     * d'ouverture d'un scénario depuis
+     * le gestionnaire client.
+     *
+     * @param handler handler plugin
+     */
+    public void setDialogueEditorRequestHandler(
+            BiConsumer<UUID, String> handler
+    ) {
+        dialogueEditorBridge.setDialogueEditorRequestHandler(
+                handler
+        );
+    }
+
+    /**
+     * Définit le traitement des demandes
+     * de suppression d'un scénario.
+     *
+     * @param handler handler plugin
+     */
+    /**
+     * Définit le traitement des demandes
+     * de changement de variante d'état.
+     */
+    public void setDialogueEditorStateSwitchHandler(
+            BiConsumer<
+                    UUID,
+                    SwitchDialogueEditorStateRequest
+                    > handler
+    ) {
+        dialogueEditorBridge.setDialogueEditorStateSwitchHandler(
+                handler
+        );
+    }
+
+    public void setDialogueScenarioDeleteHandler(
+            BiConsumer<UUID, String> handler
+    ) {
+        dialogueEditorBridge.setDialogueScenarioDeleteHandler(
+                handler
+        );
+    }
+
+    /**
+     * Définit le traitement des demandes
+     * de création d'un scénario.
+     *
+     * @param handler handler plugin
+     */
+    public void setDialogueScenarioCreateHandler(
+            BiConsumer<
+                    UUID,
+                    CreateDialogueScenarioRequest
+                    > handler
+    ) {
+        dialogueEditorBridge.setDialogueScenarioCreateHandler(
+                handler
+        );
     }
 
     /**
      * Envoie l'état visible courant d'un dialogue
-     * au client NeoForge du joueur.
-     *
-     * <p>Les objets de présentation du plugin sont convertis
-     * en types Java standards avant l'appel réflexif afin
-     * que le mod ne dépende jamais des classes du plugin.
+     * au client NeoForge.
      *
      * @param playerUuid joueur destinataire
-     * @param view       état visible du dialogue
+     * @param view état visible du dialogue
      *
-     * @return {@code true} si le mod a accepté l'envoi
+     * @return {@code true} si l'envoi a réussi
      */
     public boolean showDialogue(
             UUID playerUuid,
             DialogueView view
     ) {
-        if (showDialogueMethod == null) {
-            return false;
-        }
-
-        int size =
-                view.choices().size();
-
-        int[] positions =
-                new int[size];
-
-        String[] labels =
-                new String[size];
-
-        for (int i = 0; i < size; i++) {
-
-            DialogueChoiceView choice =
-                    view.choices().get(i);
-
-            positions[i] =
-                    choice.position();
-
-            labels[i] =
-                    choice.label();
-        }
-
-        try {
-            Object result =
-                    showDialogueMethod.invoke(
-                            null,
-                            playerUuid,
-                            view.speaker(),
-                            view.text(),
-                            view.interactionType().name(),
-                            positions,
-                            labels
-                    );
-
-            return result instanceof Boolean success
-                    && success;
-
-        } catch (ReflectiveOperationException e) {
-
-            RpgLogger.error(
-                    "Impossible d'envoyer le dialogue via NeoForge : "
-                            + e.getMessage()
-            );
-
-            return false;
-        }
+        return dialogueRuntimeBridge.showDialogue(
+                playerUuid,
+                view
+        );
     }
 
     /**
-     * Demande au mod NeoForge de fermer l'interface
+     * Demande la fermeture de l'interface
      * de dialogue du joueur.
      *
      * @param playerUuid joueur destinataire
      *
-     * @return {@code true} si le mod a accepté l'envoi
+     * @return {@code true} si l'envoi a réussi
      */
     public boolean dismissDialogue(
             UUID playerUuid
     ) {
-        if (dismissDialogueMethod == null) {
-            return false;
-        }
-
-        try {
-            Object result =
-                    dismissDialogueMethod.invoke(
-                            null,
-                            playerUuid
-                    );
-
-            return result instanceof Boolean success
-                    && success;
-
-        } catch (ReflectiveOperationException e) {
-
-            RpgLogger.error(
-                    "Impossible de fermer le dialogue via NeoForge : "
-                            + e.getMessage()
-            );
-
-            return false;
-        }
+        return dialogueRuntimeBridge.dismissDialogue(
+                playerUuid
+        );
     }
 
     /**
-     * Traite une demande CONTINUE provenant
-     * du client NeoForge.
+     * Envoie la liste des scénarios
+     * au gestionnaire de dialogues.
      *
-     * @param playerUuid joueur concerné
-     */
-    private void handleDialogueContinue(
-            UUID playerUuid
-    ) {
-        if (dialogueRunner == null) {
-
-            RpgLogger.error(
-                    "CONTINUE_DIALOGUE reçu mais DialogueRunner indisponible."
-            );
-
-            return;
-        }
-
-        boolean success =
-                dialogueRunner.advance(
-                        playerUuid
-                );
-
-        if (!success) {
-
-            RpgLogger.debug(
-                    "CONTINUE_DIALOGUE refusé pour le joueur "
-                            + playerUuid
-            );
-        }
-    }
-
-    /**
-     * Traite la sélection d'un choix provenant
-     * du client NeoForge.
+     * @param playerUuid joueur destinataire
+     * @param scenarios scénarios disponibles
      *
-     * @param playerUuid joueur concerné
-     * @param position   position du choix sélectionné
+     * @return {@code true} si l'envoi a réussi
      */
-    private void handleDialogueChoice(
+    public boolean showDialogueManager(
             UUID playerUuid,
-            Integer position
+            List<DialogueEditorScenarioSummaryView> scenarios
     ) {
-        if (dialogueRunner == null) {
-
-            RpgLogger.error(
-                    "SELECT_DIALOGUE_CHOICE reçu "
-                            + "mais DialogueRunner indisponible."
-            );
-
-            return;
-        }
-
-        boolean success =
-                dialogueRunner.choose(
-                        playerUuid,
-                        position
-                );
-
-        if (!success) {
-
-            RpgLogger.debug(
-                    "SELECT_DIALOGUE_CHOICE refusé "
-                            + "pour le joueur "
-                            + playerUuid
-                            + " | position="
-                            + position
-            );
-        }
+        return dialogueEditorBridge.showDialogueManager(
+                playerUuid,
+                scenarios
+        );
     }
 
     /**
-     * Traite une confirmation de fin provenant
-     * du client NeoForge.
+     * Envoie une vue complète de l'éditeur
+     * au client NeoForge.
+     *
+     * @param playerUuid joueur destinataire
+     * @param view vue de l'éditeur
+     *
+     * @return {@code true} si l'envoi a réussi
+     */
+    public boolean showDialogueEditor(
+            UUID playerUuid,
+            DialogueEditorView view
+    ) {
+        return dialogueEditorBridge.showDialogueEditor(
+                playerUuid,
+                view
+        );
+    }
+
+    /**
+     * Lit l'état d'une quête via le mod NeoForge.
      *
      * @param playerUuid joueur concerné
+     * @param questId identifiant externe de la quête
+     *
+     * @return état retourné par le mod
      */
-    private void handleDialogueFinish(
-            UUID playerUuid
+    public String getQuestState(
+            UUID playerUuid,
+            String questId
     ) {
-        if (dialogueRunner == null) {
-
-            RpgLogger.error(
-                    "FINISH_DIALOGUE reçu mais DialogueRunner indisponible."
-            );
-
-            return;
-        }
-
-        boolean success =
-                dialogueRunner.finish(
-                        playerUuid
-                );
-
-        if (!success) {
-
-            RpgLogger.debug(
-                    "FINISH_DIALOGUE refusé pour le joueur "
-                            + playerUuid
-            );
-        }
+        return questBridge.getQuestState(
+                playerUuid,
+                questId
+        );
     }
 
     /**
-     * Supprime les callbacks enregistrés dans le mod
-     * et libère les références conservées par le bridge.
+     * Demande au mod NeoForge de démarrer
+     * une quête pour un joueur.
      *
-     * <p>Ce nettoyage est important lors de l'arrêt ou
-     * du rechargement du plugin afin que le mod ne conserve
-     * aucune référence vers l'ancien ClassLoader Bukkit.
+     * @param playerUuid joueur concerné
+     * @param questId identifiant externe de la quête
+     *
+     * @return {@code true} si l'opération a réussi
+     */
+    public boolean startQuest(
+            UUID playerUuid,
+            String questId
+    ) {
+        return questBridge.startQuest(
+                playerUuid,
+                questId
+        );
+    }
+
+    /**
+     * Retourne le nom affichable d'une quête.
+     *
+     * @param questId identifiant externe de la quête
+     *
+     * @return nom affichable de la quête
+     */
+    public String getQuestDisplayName(
+            String questId
+    ) {
+        return questBridge.getQuestDisplayName(
+                questId
+        );
+    }
+
+    /**
+     * Arrête proprement tous les bridges
+     * spécialisés.
      */
     public void shutdown() {
 
-        clearHandler(
-                clearDialogueContinueHandlerMethod,
-                "CONTINUE"
-        );
+        dialogueRuntimeBridge.shutdown();
 
-        clearHandler(
-                clearDialogueChoiceHandlerMethod,
-                "CHOICE"
-        );
+        dialogueEditorBridge.shutdown();
 
-        clearHandler(
-                clearDialogueFinishHandlerMethod,
-                "FINISH"
-        );
-
-        dialogueRunner =
-                null;
-
-        clearDialogueContinueHandlerMethod =
-                null;
-
-        clearDialogueChoiceHandlerMethod =
-                null;
-
-        clearDialogueFinishHandlerMethod =
-                null;
-
-        showDialogueMethod =
-                null;
-
-        dismissDialogueMethod =
-                null;
+        questBridge.shutdown();
 
         RpgLogger.info(
                 "Bridge NeoForge arrêté."
@@ -440,33 +360,19 @@ public final class NeoForgeBridge {
     }
 
     /**
-     * Appelle une méthode de nettoyage exposée
-     * par le mod NeoForge.
+     * Nettoie les bridges lorsqu'une erreur survient
+     * pendant leur initialisation.
      *
-     * @param method méthode réflexive à appeler
-     * @param name   nom du handler utilisé dans les logs
+     * <p>Chaque bridge sait gérer un shutdown partiel :
+     * les références non initialisées sont ignorées.
      */
-    private void clearHandler(
-            Method method,
-            String name
-    ) {
-        if (method == null) {
-            return;
-        }
+    private void shutdownAfterInitializationFailure() {
 
-        try {
-            method.invoke(
-                    null
-            );
+        dialogueRuntimeBridge.shutdown();
 
-        } catch (ReflectiveOperationException e) {
+        dialogueEditorBridge.shutdown();
 
-            RpgLogger.error(
-                    "Impossible de supprimer le handler "
-                            + name
-                            + " : "
-                            + e.getMessage()
-            );
-        }
+        questBridge.shutdown();
     }
+
 }

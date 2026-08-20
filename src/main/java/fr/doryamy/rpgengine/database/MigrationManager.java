@@ -25,7 +25,8 @@ public final class MigrationManager {
                 new V5_RenameConditionTypeAndValue(),
                 new V6_RenameActionTypeAndValue(),
                 new V7_DialogSystem(),
-                new V8_DialogGraphSystem()
+                new V8_DialogGraphSystem(),
+                new V9_TriggerCascadeDelete()
         );
     }
 

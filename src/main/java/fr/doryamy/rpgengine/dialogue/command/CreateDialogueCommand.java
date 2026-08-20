@@ -5,6 +5,8 @@ import fr.doryamy.rpgengine.command.RpgSubcommand;
 import fr.doryamy.rpgengine.dialogue.DialogueService;
 import org.bukkit.command.CommandSender;
 
+import java.util.Arrays;
+
 /**
  * Crée un nouveau dialogue.
  *
@@ -37,6 +39,7 @@ public final class CreateDialogueCommand
             String[] args
     ) {
         if (args.length < 2) {
+
             sender.sendMessage(
                     "Usage : /rpg dialog create <key> <name>"
             );
@@ -47,22 +50,20 @@ public final class CreateDialogueCommand
         String key =
                 args[0];
 
-        StringBuilder name =
-                new StringBuilder();
-
-        for (int i = 1; i < args.length; i++) {
-
-            if (i > 1) {
-                name.append(" ");
-            }
-
-            name.append(args[i]);
-        }
+        String name =
+                String.join(
+                        " ",
+                        Arrays.copyOfRange(
+                                args,
+                                1,
+                                args.length
+                        )
+                );
 
         CommandResult result =
                 dialogueService.create(
                         key,
-                        name.toString()
+                        name
                 );
 
         sender.sendMessage(

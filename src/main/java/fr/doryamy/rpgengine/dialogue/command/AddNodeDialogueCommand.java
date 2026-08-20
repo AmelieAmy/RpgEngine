@@ -5,6 +5,8 @@ import fr.doryamy.rpgengine.command.RpgSubcommand;
 import fr.doryamy.rpgengine.dialogue.DialogueService;
 import org.bukkit.command.CommandSender;
 
+import java.util.Arrays;
+
 /**
  * Ajoute un node à un dialogue.
  *
@@ -22,7 +24,8 @@ public final class AddNodeDialogueCommand
     public AddNodeDialogueCommand(
             DialogueService dialogueService
     ) {
-        this.dialogueService = dialogueService;
+        this.dialogueService =
+                dialogueService;
     }
 
     @Override
@@ -36,31 +39,36 @@ public final class AddNodeDialogueCommand
             String[] args
     ) {
         if (args.length < 3) {
+
             sender.sendMessage(
-                    "Usage : /rpg dialog node add <dialogueKey> <nodeKey> <text>"
+                    "Usage : /rpg dialog node add "
+                            + "<dialogueKey> <nodeKey> <text>"
             );
 
             return false;
         }
 
-        String dialogueKey = args[0];
-        String nodeKey = args[1];
+        String dialogueKey =
+                args[0];
 
-        StringBuilder text = new StringBuilder();
+        String nodeKey =
+                args[1];
 
-        for (int i = 2; i < args.length; i++) {
-            if (i > 2) {
-                text.append(" ");
-            }
-
-            text.append(args[i]);
-        }
+        String text =
+                String.join(
+                        " ",
+                        Arrays.copyOfRange(
+                                args,
+                                2,
+                                args.length
+                        )
+                );
 
         CommandResult result =
                 dialogueService.addNode(
                         dialogueKey,
                         nodeKey,
-                        text.toString()
+                        text
                 );
 
         sender.sendMessage(

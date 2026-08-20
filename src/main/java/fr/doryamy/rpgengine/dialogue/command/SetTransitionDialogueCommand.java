@@ -6,6 +6,8 @@ import fr.doryamy.rpgengine.dialogue.DialogueService;
 import fr.doryamy.rpgengine.dialogue.DialogueTransitionType;
 import org.bukkit.command.CommandSender;
 
+import java.util.Arrays;
+
 /**
  * Configure une transition existante.
  *
@@ -47,7 +49,9 @@ public final class SetTransitionDialogueCommand
     ) {
         if (args.length < 3) {
 
-            sendUsage(sender);
+            sendUsage(
+                    sender
+            );
 
             return false;
         }
@@ -69,21 +73,29 @@ public final class SetTransitionDialogueCommand
         } catch (IllegalArgumentException e) {
 
             sender.sendMessage(
-                    "Type de transition invalide. Valeurs : AUTO, CHOICE, END."
+                    "Type de transition invalide. "
+                            + "Valeurs : AUTO, CHOICE, END."
             );
 
             return false;
         }
 
-        String targetNodeKey = null;
-        String label = null;
+        String targetNodeKey =
+                null;
+
+        String label =
+                null;
 
         switch (type) {
 
             case END -> {
 
                 if (args.length != 3) {
-                    sendUsage(sender);
+
+                    sendUsage(
+                            sender
+                    );
+
                     return false;
                 }
             }
@@ -91,7 +103,11 @@ public final class SetTransitionDialogueCommand
             case AUTO -> {
 
                 if (args.length != 4) {
-                    sendUsage(sender);
+
+                    sendUsage(
+                            sender
+                    );
+
                     return false;
                 }
 
@@ -102,29 +118,26 @@ public final class SetTransitionDialogueCommand
             case CHOICE -> {
 
                 if (args.length < 5) {
-                    sendUsage(sender);
+
+                    sendUsage(
+                            sender
+                    );
+
                     return false;
                 }
 
                 targetNodeKey =
                         args[3];
 
-                StringBuilder labelBuilder =
-                        new StringBuilder();
-
-                for (int i = 4; i < args.length; i++) {
-
-                    if (i > 4) {
-                        labelBuilder.append(" ");
-                    }
-
-                    labelBuilder.append(
-                            args[i]
-                    );
-                }
-
                 label =
-                        labelBuilder.toString();
+                        String.join(
+                                " ",
+                                Arrays.copyOfRange(
+                                        args,
+                                        4,
+                                        args.length
+                                )
+                        );
             }
         }
 

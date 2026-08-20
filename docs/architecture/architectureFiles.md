@@ -19,10 +19,16 @@ src
                             DialogActionExecutor.java
                             MessageActionExecutor.java
                             PlayerVariableActionExecutor.java
+                            QuestActionExecutor.java
                         ActionExecutor.java
                         ActionManager.java
                     bridge
+                        mapping
+                            DialogueEditorBridgeMapper.java
+                        DialogueEditorBridge.java
+                        DialogueRuntimeBridge.java
                         NeoForgeBridge.java
+                        QuestBridge.java
                     command
                         CommandManager.java
                         CommandResult.java
@@ -36,6 +42,7 @@ src
                             ExpressionParser.java
                         providers
                             PlayerConditionProvider.java
+                            QuestConditionProvider.java
                         ConditionManager.java
                         ConditionProvider.java
                     database
@@ -49,6 +56,7 @@ src
                             V6_RenameActionTypeAndValue.java
                             V7_DialogSystem.java
                             V8_DialogGraphSystem.java
+                            V9_TriggerCascadeDelete.java
                         DatabaseManager.java
                         MigrationManager.java
                     dialogue
@@ -63,12 +71,30 @@ src
                             ListDialogueCommand.java
                             ListTransitionActionDialogueCommand.java
                             ListTransitionConditionDialogueCommand.java
+                            OpenDialogueEditorCommand.java
                             PreviewDialogueCommand.java
                             RemoveTransitionActionDialogueCommand.java
                             RemoveTransitionConditionDialogueCommand.java
                             SetStartNodeDialogueCommand.java
                             SetTransitionDialogueCommand.java
                             UpdateNodeTextDialogueCommand.java
+                        editor
+                            view
+                                DialogueEditorActionView.java
+                                DialogueEditorConditionView.java
+                                DialogueEditorGraphView.java
+                                DialogueEditorNodeView.java
+                                DialogueEditorQuestView.java
+                                DialogueEditorScenarioSummaryView.java
+                                DialogueEditorTransitionView.java
+                                DialogueEditorTriggerView.java
+                                DialogueEditorView.java
+                            CreateDialogueScenarioRequest.java
+                            DialogueEditorService.java
+                            DialogueEditorViewMapper.java
+                            DialogueScenarioResolver.java
+                            DialogueScenarioService.java
+                            SwitchDialogueEditorStateRequest.java
                         presentation
                             DialogueChoiceView.java
                             DialogueInteractionType.java
@@ -95,6 +121,11 @@ src
                         Condition.java
                         Trigger.java
                         TriggerType.java
+                    quest
+                        ftb
+                            FtbQuestService.java
+                        QuestService.java
+                        QuestState.java
                     repository
                         ActionRepository.java
                         ConditionRepository.java
@@ -103,6 +134,7 @@ src
                     trigger
                         TriggerContext.java
                         TriggerManager.java
+                        TriggerService.java
                     util
                         RpgLogger.java
                     RpgEngine.java
