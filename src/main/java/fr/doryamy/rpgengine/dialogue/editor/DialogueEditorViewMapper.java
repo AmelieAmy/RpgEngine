@@ -2,12 +2,14 @@ package fr.doryamy.rpgengine.dialogue.editor;
 
 import fr.doryamy.rpgengine.dialogue.Dialogue;
 import fr.doryamy.rpgengine.dialogue.DialogueNode;
+import fr.doryamy.rpgengine.dialogue.DialoguePlayerReply;
 import fr.doryamy.rpgengine.dialogue.DialogueTransition;
 import fr.doryamy.rpgengine.dialogue.editor.formatter.DialogueEditorValueFormatter;
 import fr.doryamy.rpgengine.dialogue.editor.view.DialogueEditorActionView;
 import fr.doryamy.rpgengine.dialogue.editor.view.DialogueEditorConditionView;
 import fr.doryamy.rpgengine.dialogue.editor.view.DialogueEditorGraphView;
 import fr.doryamy.rpgengine.dialogue.editor.view.DialogueEditorNodeView;
+import fr.doryamy.rpgengine.dialogue.editor.view.DialogueEditorPlayerReplyView;
 import fr.doryamy.rpgengine.dialogue.editor.view.DialogueEditorTransitionView;
 import fr.doryamy.rpgengine.model.Action;
 import fr.doryamy.rpgengine.model.Condition;
@@ -33,14 +35,6 @@ public final class DialogueEditorViewMapper {
                 valueFormatter;
     }
 
-    /**
-     * Construit la projection graphique
-     * d'un dialogue.
-     *
-     * @param dialogue dialogue métier
-     *
-     * @return graphe destiné à l'éditeur
-     */
     public DialogueEditorGraphView toGraphView(
             Dialogue dialogue
     ) {
@@ -63,10 +57,6 @@ public final class DialogueEditorViewMapper {
         );
     }
 
-    /**
-     * Construit la projection d'un node
-     * et de ses transitions sortantes.
-     */
     private DialogueEditorNodeView toNodeView(
             Dialogue dialogue,
             DialogueNode node
@@ -76,39 +66,36 @@ public final class DialogueEditorViewMapper {
                                 node.getKey()
                         )
                         .stream()
-                        .map(
-                                this::toTransitionView
-                        )
+                        .map(this::toTransitionView)
                         .toList();
 
         return new DialogueEditorNodeView(
                 node.getKey(),
                 node.getText(),
+                node.getKind().name(),
                 transitions
         );
     }
 
-    /**
-     * Construit la projection
-     * d'une transition.
-     */
     private DialogueEditorTransitionView toTransitionView(
             DialogueTransition transition
     ) {
         List<DialogueEditorConditionView> conditions =
                 transition.getConditions()
                         .stream()
-                        .map(
-                                this::toConditionView
-                        )
+                        .map(this::toConditionView)
                         .toList();
 
         List<DialogueEditorActionView> actions =
                 transition.getActions()
                         .stream()
-                        .map(
-                                this::toActionView
-                        )
+                        .map(this::toActionView)
+                        .toList();
+
+        List<DialogueEditorPlayerReplyView> playerReplies =
+                transition.getPlayerReplies()
+                        .stream()
+                        .map(this::toPlayerReplyView)
                         .toList();
 
         return new DialogueEditorTransitionView(
@@ -117,8 +104,27 @@ public final class DialogueEditorViewMapper {
                 transition.getTargetNodeKey(),
                 transition.getLabel(),
                 transition.getPosition(),
+                transition.isTerminal(),
                 conditions,
-                actions
+                actions,
+                playerReplies
+        );
+    }
+
+    private DialogueEditorPlayerReplyView toPlayerReplyView(
+            DialoguePlayerReply reply
+    ) {
+        return new DialogueEditorPlayerReplyView(
+                reply.getText(),
+                reply.getPosition(),
+                reply.getConditions()
+                        .stream()
+                        .map(this::toConditionView)
+                        .toList(),
+                reply.getActions()
+                        .stream()
+                        .map(this::toActionView)
+                        .toList()
         );
     }
 

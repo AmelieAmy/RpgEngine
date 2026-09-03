@@ -26,7 +26,11 @@ public final class MigrationManager {
                 new V6_RenameActionTypeAndValue(),
                 new V7_DialogSystem(),
                 new V8_DialogGraphSystem(),
-                new V9_TriggerCascadeDelete()
+                new V9_TriggerCascadeDelete(),
+                new V10_AutoPlayerReply(),
+                new V11_PlayerReplySequence(),
+                new V12_TerminalDialogueTransitions(),
+                new V13_StructuralDialogueNodes()
         );
     }
 

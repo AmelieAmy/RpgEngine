@@ -2,9 +2,11 @@ package fr.doryamy.rpgengine.quest.ftb;
 
 import fr.doryamy.rpgengine.bridge.NeoForgeBridge;
 import fr.doryamy.rpgengine.quest.QuestService;
+import fr.doryamy.rpgengine.quest.QuestSummary;
 import fr.doryamy.rpgengine.quest.QuestState;
 import fr.doryamy.rpgengine.util.RpgLogger;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -63,6 +65,11 @@ public final class FtbQuestService
                 playerUuid,
                 questId
         );
+    }
+
+    @Override
+    public List<QuestSummary> findAll() {
+        return bridge.getAvailableQuests();
     }
 
     @Override

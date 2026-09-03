@@ -3,109 +3,52 @@ package fr.doryamy.rpgengine.bridge;
 import fr.doryamy.rpgengine.dialogue.DialogueRunner;
 import fr.doryamy.rpgengine.dialogue.editor.CreateDialogueScenarioRequest;
 import fr.doryamy.rpgengine.dialogue.editor.SwitchDialogueEditorStateRequest;
+import fr.doryamy.rpgengine.dialogue.editor.SetDialogueTransitionTerminalRequest;
+import fr.doryamy.rpgengine.dialogue.editor.CreateDialogueBranchRequest;
+import fr.doryamy.rpgengine.dialogue.editor.InsertDialogueNpcReplyRequest;
 import fr.doryamy.rpgengine.dialogue.editor.view.DialogueEditorScenarioSummaryView;
 import fr.doryamy.rpgengine.dialogue.editor.view.DialogueEditorView;
 import fr.doryamy.rpgengine.dialogue.presentation.DialogueView;
+import fr.doryamy.rpgengine.quest.QuestSummary;
 import fr.doryamy.rpgengine.util.RpgLogger;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 
 /**
  * Façade entre RPGEngine Plugin et le mod RPGEngine NeoForge.
- *
- * <p>Le plugin accède au mod uniquement par réflexion afin
- * de ne conserver aucune dépendance compile-time vers NeoForge.
- *
- * <p>Les responsabilités spécialisées sont déléguées
- * à des bridges dédiés :
- *
- * <pre>
- * DialogueRuntimeBridge
- *   showDialogue(...)
- *   dismissDialogue(...)
- *   CONTINUE
- *   CHOICE
- *   FINISH
- *
- * DialogueEditorBridge
- *   showDialogueManager(...)
- *   showDialogueEditor(...)
- *   ouverture d'un scénario
- *   suppression d'un scénario
- *
- * QuestBridge
- *   getQuestState(...)
- *   startQuest(...)
- * </pre>
- *
- * <p>Cette classe constitue uniquement la façade publique
- * utilisée par le reste du plugin.
- *
- * <p>La logique métier reste entièrement dans RPGEngine.
  */
 public final class NeoForgeBridge {
 
     private static final String BRIDGE_CLASS =
             "fr.doryamy.rpgengine.neoforge.bridge.RpgEngineBridgeApi";
 
-    /*
-     * Runtime des dialogues.
-     */
     private final DialogueRuntimeBridge dialogueRuntimeBridge =
             new DialogueRuntimeBridge();
 
-    /*
-     * Administration / éditeur de dialogues.
-     */
     private final DialogueEditorBridge dialogueEditorBridge =
             new DialogueEditorBridge();
 
-    /*
-     * Intégration des quêtes.
-     */
     private final QuestBridge questBridge =
             new QuestBridge();
 
-    /**
-     * Initialise la façade et tous
-     * les bridges spécialisés.
-     *
-     * @return {@code true} si l'API NeoForge attendue
-     *         a été trouvée et initialisée
-     */
     public boolean initialize() {
-
         try {
             Class<?> bridgeClass =
                     Class.forName(
                             BRIDGE_CLASS
                     );
 
-            /*
-             * ------------------------------------------------
-             * Runtime dialogue
-             * ------------------------------------------------
-             */
             dialogueRuntimeBridge.initialize(
                     bridgeClass
             );
 
-            /*
-             * ------------------------------------------------
-             * Administration / éditeur
-             * ------------------------------------------------
-             */
             dialogueEditorBridge.initialize(
                     bridgeClass
             );
 
-            /*
-             * ------------------------------------------------
-             * Quêtes
-             * ------------------------------------------------
-             */
             questBridge.initialize(
                     bridgeClass
             );
@@ -124,7 +67,6 @@ public final class NeoForgeBridge {
             );
 
             shutdownAfterInitializationFailure();
-
             return false;
 
         } catch (RuntimeException e) {
@@ -138,16 +80,10 @@ public final class NeoForgeBridge {
             );
 
             shutdownAfterInitializationFailure();
-
             return false;
         }
     }
 
-    /**
-     * Branche le runtime des dialogues.
-     *
-     * @param dialogueRunner runtime serveur des dialogues
-     */
     public void setDialogueRunner(
             DialogueRunner dialogueRunner
     ) {
@@ -156,13 +92,6 @@ public final class NeoForgeBridge {
         );
     }
 
-    /**
-     * Définit le traitement des demandes
-     * d'ouverture d'un scénario depuis
-     * le gestionnaire client.
-     *
-     * @param handler handler plugin
-     */
     public void setDialogueEditorRequestHandler(
             BiConsumer<UUID, String> handler
     ) {
@@ -171,21 +100,209 @@ public final class NeoForgeBridge {
         );
     }
 
-    /**
-     * Définit le traitement des demandes
-     * de suppression d'un scénario.
-     *
-     * @param handler handler plugin
-     */
-    /**
-     * Définit le traitement des demandes
-     * de changement de variante d'état.
-     */
-    public void setDialogueEditorStateSwitchHandler(
+    public void setDialogueTriggerSelectionStartHandler(
+            BiConsumer<UUID, String> handler
+    ) {
+        dialogueEditorBridge.setDialogueTriggerSelectionStartHandler(
+                handler
+        );
+    }
+
+    public void setDialogueQuestListRequestHandler(
+            BiConsumer<UUID, String> handler
+    ) {
+        dialogueEditorBridge.setDialogueQuestListRequestHandler(
+                handler
+        );
+    }
+
+    public void setDialogueQuestSelectionHandler(
+            BiConsumer<UUID, Map<String, String>> handler
+    ) {
+        dialogueEditorBridge.setDialogueQuestSelectionHandler(
+                handler
+        );
+    }
+
+    public void setDialogueNodeTextUpdateHandler(
+            BiConsumer<UUID, Map<String, String>> handler
+    ) {
+        dialogueEditorBridge.setDialogueNodeTextUpdateHandler(
+                handler
+        );
+    }
+
+    public void setDialogueChoiceLabelUpdateHandler(
+            BiConsumer<UUID, Map<String, String>> handler
+    ) {
+        dialogueEditorBridge.setDialogueChoiceLabelUpdateHandler(
+                handler
+        );
+    }
+
+    public void setDialoguePlayerReplyAddHandler(
+            BiConsumer<UUID, Map<String, String>> handler
+    ) {
+        dialogueEditorBridge.setDialoguePlayerReplyAddHandler(
+                handler
+        );
+    }
+
+    public void setDialogueTransitionTerminalHandler(
             BiConsumer<
                     UUID,
-                    SwitchDialogueEditorStateRequest
+                    SetDialogueTransitionTerminalRequest
                     > handler
+    ) {
+        dialogueEditorBridge.setDialogueTransitionTerminalHandler(
+                handler
+        );
+    }
+
+    public void setDialogueNpcReplyInsertHandler(
+            BiConsumer<
+                    UUID,
+                    InsertDialogueNpcReplyRequest
+                    > handler
+    ) {
+        dialogueEditorBridge.setDialogueNpcReplyInsertHandler(
+                handler
+        );
+    }
+
+    public void setDialogueBranchCreateHandler(
+            BiConsumer<
+                    UUID,
+                    CreateDialogueBranchRequest
+                    > handler
+    ) {
+        dialogueEditorBridge.setDialogueBranchCreateHandler(
+                handler
+        );
+    }
+
+    public void setDialogueElementDeleteHandler(
+            BiConsumer<UUID, Map<String, String>> handler
+    ) {
+        dialogueEditorBridge.setDialogueElementDeleteHandler(
+                handler
+        );
+    }
+
+
+    public void setDialogueActionEditorRequestHandler(
+            BiConsumer<UUID, Map<String, String>> handler
+    ) {
+        dialogueEditorBridge.setDialogueActionEditorRequestHandler(
+                handler
+        );
+    }
+
+    public void setDialogueActionUpdateHandler(
+            BiConsumer<UUID, Map<String, String>> handler
+    ) {
+        dialogueEditorBridge.setDialogueActionUpdateHandler(
+                handler
+        );
+    }
+
+    public void setDialogueConditionEditorRequestHandler(
+            BiConsumer<UUID, Map<String, String>> handler
+    ) {
+        dialogueEditorBridge.setDialogueConditionEditorRequestHandler(
+                handler
+        );
+    }
+
+    public void setDialogueConditionUpdateHandler(
+            BiConsumer<UUID, Map<String, String>> handler
+    ) {
+        dialogueEditorBridge.setDialogueConditionUpdateHandler(
+                handler
+        );
+    }
+
+    public boolean showDialogueQuestSelector(
+            UUID playerUuid,
+            String dialogueKey,
+            List<QuestSummary> quests
+    ) {
+        List<Map<String, String>> data =
+                quests.stream()
+                        .map(quest -> Map.of(
+                                "id", quest.id(),
+                                "name", quest.name(),
+                                "description", quest.description()
+                        ))
+                        .toList();
+
+        return dialogueEditorBridge.showDialogueQuestSelector(
+                playerUuid,
+                dialogueKey,
+                data
+        );
+    }
+
+    public boolean showDialogueConditionEditor(
+            UUID playerUuid,
+            String dialogueKey,
+            String transitionKey,
+            int conditionPosition,
+            String provider,
+            String expression,
+            List<QuestSummary> quests
+    ) {
+        List<Map<String, String>> data =
+                quests.stream()
+                        .map(quest -> Map.of(
+                                "id", quest.id(),
+                                "name", quest.name(),
+                                "description", quest.description()
+                        ))
+                        .toList();
+
+        return dialogueEditorBridge.showDialogueConditionEditor(
+                playerUuid,
+                dialogueKey,
+                transitionKey,
+                conditionPosition,
+                provider,
+                expression,
+                data
+        );
+    }
+
+    public boolean showDialogueActionEditor(
+            UUID playerUuid,
+            String dialogueKey,
+            String transitionKey,
+            int actionPosition,
+            String provider,
+            String expression,
+            List<QuestSummary> quests
+    ) {
+        List<Map<String, String>> data =
+                quests.stream()
+                        .map(quest -> Map.of(
+                                "id", quest.id(),
+                                "name", quest.name(),
+                                "description", quest.description()
+                        ))
+                        .toList();
+
+        return dialogueEditorBridge.showDialogueActionEditor(
+                playerUuid,
+                dialogueKey,
+                transitionKey,
+                actionPosition,
+                provider,
+                expression,
+                data
+        );
+    }
+
+    public void setDialogueEditorStateSwitchHandler(
+            BiConsumer<UUID, SwitchDialogueEditorStateRequest> handler
     ) {
         dialogueEditorBridge.setDialogueEditorStateSwitchHandler(
                 handler
@@ -200,32 +317,14 @@ public final class NeoForgeBridge {
         );
     }
 
-    /**
-     * Définit le traitement des demandes
-     * de création d'un scénario.
-     *
-     * @param handler handler plugin
-     */
     public void setDialogueScenarioCreateHandler(
-            BiConsumer<
-                    UUID,
-                    CreateDialogueScenarioRequest
-                    > handler
+            BiConsumer<UUID, CreateDialogueScenarioRequest> handler
     ) {
         dialogueEditorBridge.setDialogueScenarioCreateHandler(
                 handler
         );
     }
 
-    /**
-     * Envoie l'état visible courant d'un dialogue
-     * au client NeoForge.
-     *
-     * @param playerUuid joueur destinataire
-     * @param view état visible du dialogue
-     *
-     * @return {@code true} si l'envoi a réussi
-     */
     public boolean showDialogue(
             UUID playerUuid,
             DialogueView view
@@ -236,14 +335,6 @@ public final class NeoForgeBridge {
         );
     }
 
-    /**
-     * Demande la fermeture de l'interface
-     * de dialogue du joueur.
-     *
-     * @param playerUuid joueur destinataire
-     *
-     * @return {@code true} si l'envoi a réussi
-     */
     public boolean dismissDialogue(
             UUID playerUuid
     ) {
@@ -252,15 +343,6 @@ public final class NeoForgeBridge {
         );
     }
 
-    /**
-     * Envoie la liste des scénarios
-     * au gestionnaire de dialogues.
-     *
-     * @param playerUuid joueur destinataire
-     * @param scenarios scénarios disponibles
-     *
-     * @return {@code true} si l'envoi a réussi
-     */
     public boolean showDialogueManager(
             UUID playerUuid,
             List<DialogueEditorScenarioSummaryView> scenarios
@@ -271,15 +353,6 @@ public final class NeoForgeBridge {
         );
     }
 
-    /**
-     * Envoie une vue complète de l'éditeur
-     * au client NeoForge.
-     *
-     * @param playerUuid joueur destinataire
-     * @param view vue de l'éditeur
-     *
-     * @return {@code true} si l'envoi a réussi
-     */
     public boolean showDialogueEditor(
             UUID playerUuid,
             DialogueEditorView view
@@ -290,14 +363,10 @@ public final class NeoForgeBridge {
         );
     }
 
-    /**
-     * Lit l'état d'une quête via le mod NeoForge.
-     *
-     * @param playerUuid joueur concerné
-     * @param questId identifiant externe de la quête
-     *
-     * @return état retourné par le mod
-     */
+    public List<QuestSummary> getAvailableQuests() {
+        return questBridge.getAvailableQuests();
+    }
+
     public String getQuestState(
             UUID playerUuid,
             String questId
@@ -308,15 +377,6 @@ public final class NeoForgeBridge {
         );
     }
 
-    /**
-     * Demande au mod NeoForge de démarrer
-     * une quête pour un joueur.
-     *
-     * @param playerUuid joueur concerné
-     * @param questId identifiant externe de la quête
-     *
-     * @return {@code true} si l'opération a réussi
-     */
     public boolean startQuest(
             UUID playerUuid,
             String questId
@@ -327,13 +387,6 @@ public final class NeoForgeBridge {
         );
     }
 
-    /**
-     * Retourne le nom affichable d'une quête.
-     *
-     * @param questId identifiant externe de la quête
-     *
-     * @return nom affichable de la quête
-     */
     public String getQuestDisplayName(
             String questId
     ) {
@@ -342,16 +395,9 @@ public final class NeoForgeBridge {
         );
     }
 
-    /**
-     * Arrête proprement tous les bridges
-     * spécialisés.
-     */
     public void shutdown() {
-
         dialogueRuntimeBridge.shutdown();
-
         dialogueEditorBridge.shutdown();
-
         questBridge.shutdown();
 
         RpgLogger.info(
@@ -359,20 +405,9 @@ public final class NeoForgeBridge {
         );
     }
 
-    /**
-     * Nettoie les bridges lorsqu'une erreur survient
-     * pendant leur initialisation.
-     *
-     * <p>Chaque bridge sait gérer un shutdown partiel :
-     * les références non initialisées sont ignorées.
-     */
     private void shutdownAfterInitializationFailure() {
-
         dialogueRuntimeBridge.shutdown();
-
         dialogueEditorBridge.shutdown();
-
         questBridge.shutdown();
     }
-
 }

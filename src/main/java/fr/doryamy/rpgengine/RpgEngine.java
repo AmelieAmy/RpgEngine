@@ -19,7 +19,10 @@ import fr.doryamy.rpgengine.dialogue.*;
 import fr.doryamy.rpgengine.dialogue.command.*;
 import fr.doryamy.rpgengine.dialogue.editor.DialogueEditorService;
 import fr.doryamy.rpgengine.dialogue.editor.DialogueScenarioService;
+import fr.doryamy.rpgengine.dialogue.editor.DialogueTriggerSelectionService;
 import fr.doryamy.rpgengine.dialogue.editor.SwitchDialogueEditorStateRequest;
+import fr.doryamy.rpgengine.dialogue.editor.InsertDialogueNpcReplyRequest;
+import fr.doryamy.rpgengine.dialogue.editor.CreateDialogueBranchRequest;
 import fr.doryamy.rpgengine.dialogue.presentation.DialoguePresenter;
 import fr.doryamy.rpgengine.dialogue.presentation.ModdedDialoguePresenter;
 import fr.doryamy.rpgengine.listener.NPCListener;
@@ -155,7 +158,8 @@ public final class RpgEngine extends JavaPlugin {
                 new DialogueScenarioService(
                         dialogueService,
                         triggerRepository,
-                        triggerService
+                        triggerService,
+                        conditionRepository
                 );
 
         /*
@@ -224,6 +228,13 @@ public final class RpgEngine extends JavaPlugin {
                         questService
                 );
 
+
+        DialogueTriggerSelectionService triggerSelectionService =
+                new DialogueTriggerSelectionService(
+                        triggerRepository,
+                        triggerService
+                );
+
         conditionManager.register(
                 new QuestConditionProvider(
                         questService
@@ -290,6 +301,804 @@ public final class RpgEngine extends JavaPlugin {
                                                                 view
                                                         )
                                 )
+        );
+
+
+        neoForgeBridge.setDialogueTriggerSelectionStartHandler(
+                (playerUuid, dialogueKey) -> {
+
+                    boolean started =
+                            triggerSelectionService.startSelection(
+                                    playerUuid,
+                                    dialogueKey
+                            );
+
+                    org.bukkit.entity.Player player =
+                            Bukkit.getPlayer(
+                                    playerUuid
+                            );
+
+                    if (!started) {
+
+                        if (player != null) {
+
+                            player.sendMessage(
+                                    "§cImpossible de démarrer la sélection du déclencheur."
+                            );
+                        }
+
+                        /*
+                         * Le client a déjà fermé l'écran.
+                         * En cas d'échec, on lui renvoie donc
+                         * immédiatement la vue courante.
+                         */
+                        dialogueEditorService
+                                .buildView(
+                                        dialogueKey
+                                )
+                                .ifPresent(
+                                        view ->
+                                                neoForgeBridge
+                                                        .showDialogueEditor(
+                                                                playerUuid,
+                                                                view
+                                                        )
+                                );
+
+                        return;
+                    }
+
+                    if (player != null) {
+
+                        player.sendMessage(
+                                "§e§lSélection du déclencheur"
+                        );
+
+                        player.sendMessage(
+                                "§7Faites un clic droit sur le PNJ à utiliser."
+                        );
+                    }
+                }
+        );
+
+
+        neoForgeBridge.setDialogueQuestListRequestHandler(
+                (playerUuid, dialogueKey) ->
+                        neoForgeBridge.showDialogueQuestSelector(
+                                playerUuid,
+                                dialogueKey,
+                                questService.findAll()
+                        )
+        );
+
+
+        neoForgeBridge.setDialogueConditionEditorRequestHandler(
+                (playerUuid, data) -> {
+
+                    String dialogueKey =
+                            data.get(
+                                    "dialogueKey"
+                            );
+
+                    String transitionKey =
+                            data.get(
+                                    "transitionKey"
+                            );
+
+                    int conditionPosition;
+
+                    try {
+
+                        conditionPosition =
+                                Integer.parseInt(
+                                        data.getOrDefault(
+                                                "conditionPosition",
+                                                "-1"
+                                        )
+                                );
+
+                    } catch (NumberFormatException e) {
+
+                        RpgLogger.error(
+                                "Position de condition invalide reçue depuis NeoForge."
+                        );
+
+                        return;
+                    }
+
+                    dialogueService
+                            .getTransitionConditions(
+                                    dialogueKey,
+                                    transitionKey
+                            )
+                            .filter(conditions ->
+                                    conditionPosition > 0
+                                            && conditionPosition <= conditions.size()
+                            )
+                            .map(conditions ->
+                                    conditions.get(
+                                            conditionPosition - 1
+                                    )
+                            )
+                            .ifPresentOrElse(
+                                    condition ->
+                                            neoForgeBridge
+                                                    .showDialogueConditionEditor(
+                                                            playerUuid,
+                                                            dialogueKey,
+                                                            transitionKey,
+                                                            conditionPosition,
+                                                            condition.getProvider(),
+                                                            condition.getExpression(),
+                                                            questService.findAll()
+                                                    ),
+                                    () ->
+                                            RpgLogger.error(
+                                                    "Condition introuvable pour l'éditeur : "
+                                                            + dialogueKey
+                                                            + " | transition="
+                                                            + transitionKey
+                                                            + " | position="
+                                                            + conditionPosition
+                                            )
+                            );
+                }
+        );
+
+
+        neoForgeBridge.setDialogueConditionUpdateHandler(
+                (playerUuid, data) -> {
+
+                    String dialogueKey =
+                            data.get(
+                                    "dialogueKey"
+                            );
+
+                    String transitionKey =
+                            data.get(
+                                    "transitionKey"
+                            );
+
+                    String provider =
+                            data.get(
+                                    "provider"
+                            );
+
+                    String expression =
+                            data.get(
+                                    "expression"
+                            );
+
+                    int conditionPosition;
+
+                    try {
+
+                        conditionPosition =
+                                Integer.parseInt(
+                                        data.getOrDefault(
+                                                "conditionPosition",
+                                                "-1"
+                                        )
+                                );
+
+                    } catch (NumberFormatException e) {
+
+                        RpgLogger.error(
+                                "Position de condition invalide reçue depuis NeoForge."
+                        );
+
+                        return;
+                    }
+
+                    CommandResult result =
+                            dialogueService
+                                    .updateTransitionCondition(
+                                            dialogueKey,
+                                            transitionKey,
+                                            conditionPosition,
+                                            provider,
+                                            expression
+                                    );
+
+                    if (!result.isSuccess()) {
+
+                        RpgLogger.error(
+                                "Impossible de modifier la condition "
+                                        + conditionPosition
+                                        + " de la transition "
+                                        + transitionKey
+                                        + " : "
+                                        + result.getMessage()
+                        );
+
+                        return;
+                    }
+
+                    dialogueEditorService
+                            .buildView(
+                                    dialogueKey
+                            )
+                            .ifPresentOrElse(
+                                    view ->
+                                            neoForgeBridge
+                                                    .showDialogueEditor(
+                                                            playerUuid,
+                                                            view
+                                                    ),
+                                    () ->
+                                            RpgLogger.error(
+                                                    "Condition modifiée, mais impossible "
+                                                            + "de reconstruire l'éditeur : "
+                                                            + dialogueKey
+                                            )
+                            );
+                }
+        );
+
+
+        neoForgeBridge.setDialogueActionEditorRequestHandler(
+                (playerUuid, data) -> {
+
+                    String dialogueKey =
+                            data.get(
+                                    "dialogueKey"
+                            );
+
+                    String transitionKey =
+                            data.get(
+                                    "transitionKey"
+                            );
+
+                    int actionPosition;
+
+                    try {
+
+                        actionPosition =
+                                Integer.parseInt(
+                                        data.getOrDefault(
+                                                "actionPosition",
+                                                "-1"
+                                        )
+                                );
+
+                    } catch (NumberFormatException e) {
+
+                        RpgLogger.error(
+                                "Position d'action invalide reçue depuis NeoForge."
+                        );
+
+                        return;
+                    }
+
+                    dialogueService
+                            .getTransitionActions(
+                                    dialogueKey,
+                                    transitionKey
+                            )
+                            .flatMap(actions ->
+                                    actions.stream()
+                                            .filter(action ->
+                                                    action.getPosition()
+                                                            == actionPosition
+                                            )
+                                            .findFirst()
+                            )
+                            .ifPresentOrElse(
+                                    action ->
+                                            neoForgeBridge
+                                                    .showDialogueActionEditor(
+                                                            playerUuid,
+                                                            dialogueKey,
+                                                            transitionKey,
+                                                            actionPosition,
+                                                            action.getProvider(),
+                                                            action.getExpression(),
+                                                            questService.findAll()
+                                                    ),
+                                    () ->
+                                            RpgLogger.error(
+                                                    "Action introuvable pour l'éditeur : "
+                                                            + dialogueKey
+                                                            + " | transition="
+                                                            + transitionKey
+                                                            + " | position="
+                                                            + actionPosition
+                                            )
+                            );
+                }
+        );
+
+
+        neoForgeBridge.setDialogueActionUpdateHandler(
+                (playerUuid, data) -> {
+
+                    String dialogueKey =
+                            data.get(
+                                    "dialogueKey"
+                            );
+
+                    String transitionKey =
+                            data.get(
+                                    "transitionKey"
+                            );
+
+                    String provider =
+                            data.get(
+                                    "provider"
+                            );
+
+                    String expression =
+                            data.get(
+                                    "expression"
+                            );
+
+                    int actionPosition;
+
+                    try {
+
+                        actionPosition =
+                                Integer.parseInt(
+                                        data.getOrDefault(
+                                                "actionPosition",
+                                                "-1"
+                                        )
+                                );
+
+                    } catch (NumberFormatException e) {
+
+                        RpgLogger.error(
+                                "Position d'action invalide reçue depuis NeoForge."
+                        );
+
+                        return;
+                    }
+
+                    CommandResult result =
+                            dialogueService
+                                    .updateTransitionAction(
+                                            dialogueKey,
+                                            transitionKey,
+                                            actionPosition,
+                                            provider,
+                                            expression
+                                    );
+
+                    if (!result.isSuccess()) {
+
+                        RpgLogger.error(
+                                "Impossible de modifier l'action "
+                                        + actionPosition
+                                        + " de la transition "
+                                        + transitionKey
+                                        + " : "
+                                        + result.getMessage()
+                        );
+
+                        return;
+                    }
+
+                    dialogueEditorService
+                            .buildView(
+                                    dialogueKey
+                            )
+                            .ifPresentOrElse(
+                                    view ->
+                                            neoForgeBridge
+                                                    .showDialogueEditor(
+                                                            playerUuid,
+                                                            view
+                                                    ),
+                                    () ->
+                                            RpgLogger.error(
+                                                    "Action modifiée, mais impossible "
+                                                            + "de reconstruire l'éditeur : "
+                                                            + dialogueKey
+                                            )
+                            );
+                }
+        );
+
+
+        neoForgeBridge.setDialogueNodeTextUpdateHandler(
+                (playerUuid, data) -> {
+
+                    String dialogueKey =
+                            data.get("dialogueKey");
+
+                    String nodeKey =
+                            data.get("nodeKey");
+
+                    String text =
+                            data.get("text");
+
+                    CommandResult result =
+                            dialogueService.updateNodeText(
+                                    dialogueKey,
+                                    nodeKey,
+                                    text
+                            );
+
+                    if (!result.isSuccess()) {
+
+                        RpgLogger.error(
+                                "Impossible de modifier le texte du node "
+                                        + nodeKey
+                                        + " : "
+                                        + result.getMessage()
+                        );
+
+                        return;
+                    }
+
+                    dialogueEditorService
+                            .buildView(
+                                    dialogueKey
+                            )
+                            .ifPresentOrElse(
+                                    view ->
+                                            neoForgeBridge
+                                                    .showDialogueEditor(
+                                                            playerUuid,
+                                                            view
+                                                    ),
+                                    () ->
+                                            RpgLogger.error(
+                                                    "Texte modifié, mais impossible "
+                                                            + "de reconstruire l'éditeur : "
+                                                            + dialogueKey
+                                            )
+                            );
+                }
+        );
+
+
+        neoForgeBridge.setDialogueChoiceLabelUpdateHandler(
+                (playerUuid, data) -> {
+
+                    String dialogueKey =
+                            data.get(
+                                    "dialogueKey"
+                            );
+
+                    String transitionKey =
+                            data.get(
+                                    "transitionKey"
+                            );
+
+                    String label =
+                            data.get(
+                                    "label"
+                            );
+
+                    CommandResult result =
+                            dialogueService.updateChoiceLabel(
+                                    dialogueKey,
+                                    transitionKey,
+                                    label
+                            );
+
+                    if (!result.isSuccess()) {
+
+                        RpgLogger.error(
+                                "Impossible de modifier la réplique Joueur "
+                                        + transitionKey
+                                        + " : "
+                                        + result.getMessage()
+                        );
+
+                        return;
+                    }
+
+                    dialogueEditorService
+                            .buildView(
+                                    dialogueKey
+                            )
+                            .ifPresentOrElse(
+                                    view ->
+                                            neoForgeBridge
+                                                    .showDialogueEditor(
+                                                            playerUuid,
+                                                            view
+                                                    ),
+                                    () ->
+                                            RpgLogger.error(
+                                                    "Réplique Joueur modifiée, "
+                                                            + "mais impossible de reconstruire "
+                                                            + "l'éditeur : "
+                                                            + dialogueKey
+                                            )
+                            );
+                }
+        );
+
+
+        neoForgeBridge.setDialoguePlayerReplyAddHandler(
+                (playerUuid, data) -> {
+
+                    String dialogueKey =
+                            data.get(
+                                    "dialogueKey"
+                            );
+
+                    String transitionKey =
+                            data.get(
+                                    "transitionKey"
+                            );
+
+                    String text =
+                            data.get(
+                                    "text"
+                            );
+
+                    int afterPosition;
+
+                    try {
+                        afterPosition =
+                                Integer.parseInt(
+                                        data.getOrDefault(
+                                                "afterPosition",
+                                                "0"
+                                        )
+                                );
+
+                    } catch (NumberFormatException e) {
+
+                        RpgLogger.error(
+                                "Position de réplique Joueur invalide reçue depuis NeoForge."
+                        );
+
+                        return;
+                    }
+
+                    CommandResult result =
+                            dialogueService
+                                    .insertPlayerReply(
+                                            dialogueKey,
+                                            transitionKey,
+                                            afterPosition,
+                                            text
+                                    );
+
+                    if (!result.isSuccess()) {
+
+                        RpgLogger.error(
+                                "Impossible d'ajouter la réplique Joueur "
+                                        + "sur la transition "
+                                        + transitionKey
+                                        + " : "
+                                        + result.getMessage()
+                        );
+
+                        return;
+                    }
+
+                    dialogueEditorService
+                            .buildView(
+                                    dialogueKey
+                            )
+                            .ifPresentOrElse(
+                                    view ->
+                                            neoForgeBridge
+                                                    .showDialogueEditor(
+                                                            playerUuid,
+                                                            view
+                                                    ),
+                                    () ->
+                                            RpgLogger.error(
+                                                    "Réplique Joueur ajoutée, "
+                                                            + "mais impossible de reconstruire "
+                                                            + "l'éditeur : "
+                                                            + dialogueKey
+                                            )
+                            );
+                }
+        );
+
+
+        neoForgeBridge.setDialogueTransitionTerminalHandler(
+                (playerUuid, request) -> {
+
+                    CommandResult result =
+                            dialogueService
+                                    .setTransitionTerminal(
+                                            request.dialogueKey(),
+                                            request.transitionKey()
+                                    );
+
+                    if (!result.isSuccess()) {
+
+                        RpgLogger.error(
+                                "Impossible de terminer la transition "
+                                        + request.transitionKey()
+                                        + " : "
+                                        + result.getMessage()
+                        );
+
+                        return;
+                    }
+
+                    dialogueEditorService
+                            .buildView(
+                                    request.dialogueKey()
+                            )
+                            .ifPresentOrElse(
+                                    view ->
+                                            neoForgeBridge
+                                                    .showDialogueEditor(
+                                                            playerUuid,
+                                                            view
+                                                    ),
+                                    () ->
+                                            RpgLogger.error(
+                                                    "Transition terminée, "
+                                                            + "mais impossible de reconstruire "
+                                                            + "l'éditeur : "
+                                                            + request.dialogueKey()
+                                            )
+                            );
+                }
+        );
+
+
+        neoForgeBridge.setDialogueNpcReplyInsertHandler(
+                (playerUuid, request) -> {
+
+                    CommandResult result =
+                            dialogueService
+                                    .insertNpcReply(
+                                            request.dialogueKey(),
+                                            request.transitionKey(),
+                                            request.insertionKind(),
+                                            request.position(),
+                                            request.text()
+                                    );
+
+                    if (!result.isSuccess()) {
+                        RpgLogger.error(
+                                "Impossible d'ajouter la réplique PNJ "
+                                        + "sur la transition "
+                                        + request.transitionKey()
+                                        + " : "
+                                        + result.getMessage()
+                        );
+                        return;
+                    }
+
+                    dialogueEditorService
+                            .buildView(
+                                    request.dialogueKey()
+                            )
+                            .ifPresentOrElse(
+                                    view ->
+                                            neoForgeBridge
+                                                    .showDialogueEditor(
+                                                            playerUuid,
+                                                            view
+                                                    ),
+                                    () ->
+                                            RpgLogger.error(
+                                                    "Réplique PNJ ajoutée, "
+                                                            + "mais impossible de reconstruire "
+                                                            + "l'éditeur : "
+                                                            + request.dialogueKey()
+                                            )
+                            );
+                }
+        );
+
+
+
+        neoForgeBridge.setDialogueBranchCreateHandler(
+                (playerUuid, request) -> {
+
+                    CommandResult result =
+                            dialogueService
+                                    .createBranch(
+                                            request.dialogueKey(),
+                                            request.transitionKey(),
+                                            request.insertionKind(),
+                                            request.position(),
+                                            request.existingChoiceLabel(),
+                                            request.newChoiceLabel()
+                                    );
+
+                    if (!result.isSuccess()) {
+                        RpgLogger.error(
+                                "Impossible de créer l'embranchement "
+                                        + "depuis la transition "
+                                        + request.transitionKey()
+                                        + " : "
+                                        + result.getMessage()
+                        );
+                        return;
+                    }
+
+                    dialogueEditorService
+                            .buildView(
+                                    request.dialogueKey()
+                            )
+                            .ifPresentOrElse(
+                                    view ->
+                                            neoForgeBridge
+                                                    .showDialogueEditor(
+                                                            playerUuid,
+                                                            view
+                                                    ),
+                                    () ->
+                                            RpgLogger.error(
+                                                    "Embranchement créé, "
+                                                            + "mais impossible de reconstruire "
+                                                            + "l'éditeur : "
+                                                            + request.dialogueKey()
+                                            )
+                            );
+                }
+        );
+
+
+        neoForgeBridge.setDialogueElementDeleteHandler(
+                (playerUuid, data) -> {
+
+                    String dialogueKey = data.get("dialogueKey");
+                    String transitionKey = data.get("transitionKey");
+                    String deletionKindValue = data.get("deletionKind");
+
+                    int position;
+                    try {
+                        position = Integer.parseInt(
+                                data.getOrDefault("position", "0")
+                        );
+                    } catch (NumberFormatException e) {
+                        RpgLogger.error(
+                                "Position de suppression invalide reçue depuis NeoForge."
+                        );
+                        return;
+                    }
+
+                    DialogueDeletionKind deletionKind;
+                    try {
+                        deletionKind = DialogueDeletionKind.valueOf(
+                                deletionKindValue == null
+                                        ? ""
+                                        : deletionKindValue
+                        );
+                    } catch (IllegalArgumentException e) {
+                        RpgLogger.error(
+                                "Type de suppression invalide reçu depuis NeoForge : "
+                                        + deletionKindValue
+                        );
+                        return;
+                    }
+
+                    CommandResult result = dialogueService.deleteEditorElement(
+                            dialogueKey,
+                            transitionKey,
+                            deletionKind,
+                            position
+                    );
+
+                    if (!result.isSuccess()) {
+                        RpgLogger.error(
+                                "Impossible de supprimer l'élément de dialogue : "
+                                        + result.getMessage()
+                        );
+                        return;
+                    }
+
+                    dialogueEditorService
+                            .buildView(dialogueKey)
+                            .ifPresentOrElse(
+                                    view -> neoForgeBridge.showDialogueEditor(
+                                            playerUuid,
+                                            view
+                                    ),
+                                    () -> RpgLogger.error(
+                                            "Élément supprimé, mais impossible de reconstruire "
+                                                    + "l'éditeur : "
+                                                    + dialogueKey
+                                    )
+                            );
+                }
         );
 
 
@@ -428,7 +1237,11 @@ public final class RpgEngine extends JavaPlugin {
          * ====================================================
          */
 
-        registerListeners();
+        registerListeners(
+                triggerSelectionService,
+                dialogueEditorService,
+                neoForgeBridge
+        );
 
         RpgLogger.info(
                 "RPGEngine démarré."
@@ -730,12 +1543,19 @@ public final class RpgEngine extends JavaPlugin {
      * Enregistre les listeners utilisés
      * par RPGEngine.
      */
-    private void registerListeners() {
+    private void registerListeners(
+            DialogueTriggerSelectionService triggerSelectionService,
+            DialogueEditorService dialogueEditorService,
+            NeoForgeBridge neoForgeBridge
+    ) {
 
         Bukkit.getPluginManager()
                 .registerEvents(
                         new NPCListener(
-                                triggerManager
+                                triggerManager,
+                                triggerSelectionService,
+                                dialogueEditorService,
+                                neoForgeBridge
                         ),
                         this
                 );

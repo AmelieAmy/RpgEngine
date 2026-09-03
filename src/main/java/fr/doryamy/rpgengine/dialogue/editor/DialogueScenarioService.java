@@ -8,6 +8,7 @@ import fr.doryamy.rpgengine.model.Condition;
 import fr.doryamy.rpgengine.model.Trigger;
 import fr.doryamy.rpgengine.quest.QuestState;
 import fr.doryamy.rpgengine.repository.TriggerRepository;
+import fr.doryamy.rpgengine.repository.ConditionRepository;
 import fr.doryamy.rpgengine.trigger.TriggerService;
 import fr.doryamy.rpgengine.util.RpgLogger;
 
@@ -38,12 +39,14 @@ public final class DialogueScenarioService {
     private final DialogueService dialogueService;
     private final TriggerService triggerService;
     private final TriggerRepository triggerRepository;
+    private final ConditionRepository conditionRepository;
     private final DialogueScenarioResolver scenarioResolver;
 
     public DialogueScenarioService(
             DialogueService dialogueService,
             TriggerRepository triggerRepository,
-            TriggerService triggerService
+            TriggerService triggerService,
+            ConditionRepository conditionRepository
     ) {
         this.dialogueService =
                 dialogueService;
@@ -53,6 +56,9 @@ public final class DialogueScenarioService {
 
         this.triggerService =
                 triggerService;
+
+        this.conditionRepository =
+                conditionRepository;
 
         this.scenarioResolver =
                 new DialogueScenarioResolver(
@@ -287,6 +293,153 @@ public final class DialogueScenarioService {
                 "Scénario créé : "
                         + name
         );
+    }
+
+    /**
+     * Remplace la quête principale de toutes les variantes
+     * d'un scénario en conservant l'état de chaque variante.
+     *
+     * @return la clé du dialogue correspondant à l'état
+     *         actuellement affiché, si la mutation réussit
+     */
+    public Optional<String> changeQuest(
+            String currentDialogueKey,
+            String newQuestId
+    ) {
+        if (currentDialogueKey == null
+                || currentDialogueKey.isBlank()
+                || newQuestId == null
+                || newQuestId.isBlank()) {
+            return Optional.empty();
+        }
+
+        Optional<Trigger> referenceResult =
+                scenarioResolver.findTriggerForDialogue(
+                        currentDialogueKey
+                );
+
+        if (referenceResult.isEmpty()) {
+            return Optional.empty();
+        }
+
+        Trigger referenceTrigger =
+                referenceResult.get();
+
+        Optional<QuestBinding> referenceBindingResult =
+                scenarioResolver.findQuestBinding(
+                        referenceTrigger
+                );
+
+        if (referenceBindingResult.isEmpty()) {
+            RpgLogger.error(
+                    "Impossible de changer la quête : le scénario "
+                            + currentDialogueKey
+                            + " n'a pas de condition QUEST."
+            );
+            return Optional.empty();
+        }
+
+        QuestBinding referenceBinding =
+                referenceBindingResult.get();
+
+        List<Trigger> scenarioTriggers =
+                scenarioResolver.findScenarioTriggers(
+                        referenceTrigger,
+                        referenceBinding
+                );
+
+        if (scenarioTriggers.isEmpty()) {
+            return Optional.empty();
+        }
+
+        String normalizedQuestId =
+                newQuestId.trim();
+
+        /*
+         * On capture d'abord toutes les mutations avant d'écrire.
+         * Cela garantit que le scénario est résolu avec l'ancienne
+         * questId jusqu'à ce que la liste soit complète.
+         */
+        record QuestMutation(
+                int triggerId,
+                String oldExpression,
+                String newExpression
+        ) {}
+
+        List<QuestMutation> mutations =
+                new ArrayList<>();
+
+        for (Trigger trigger : scenarioTriggers) {
+            Optional<QuestBinding> bindingResult =
+                    scenarioResolver.findQuestBinding(trigger);
+
+            if (bindingResult.isEmpty()) {
+                return Optional.empty();
+            }
+
+            QuestBinding binding =
+                    bindingResult.get();
+
+            mutations.add(
+                    new QuestMutation(
+                            trigger.getId(),
+                            binding.questId() + "==" + binding.state().name(),
+                            normalizedQuestId + "==" + binding.state().name()
+                    )
+            );
+        }
+
+        /*
+         * Le repository actuel expose une connexion unique mais
+         * pas de transaction publique. On effectue donc les updates
+         * séquentiellement et on rollback applicativement si l'un
+         * d'eux échoue.
+         */
+        List<QuestMutation> applied =
+                new ArrayList<>();
+
+        for (QuestMutation mutation : mutations) {
+            if (!conditionRepository.updateQuestExpression(
+                    mutation.triggerId(),
+                    mutation.oldExpression(),
+                    mutation.newExpression()
+            )) {
+                for (int i = applied.size() - 1; i >= 0; i--) {
+                    QuestMutation rollback =
+                            applied.get(i);
+
+                    if (!conditionRepository.updateQuestExpression(
+                            rollback.triggerId(),
+                            rollback.newExpression(),
+                            rollback.oldExpression()
+                    )) {
+                        RpgLogger.error(
+                                "Rollback incomplet lors du changement de quête "
+                                        + "pour le trigger "
+                                        + rollback.triggerId()
+                        );
+                    }
+                }
+
+                return Optional.empty();
+            }
+
+            applied.add(mutation);
+        }
+
+        RpgLogger.debug(
+                "Quête du scénario modifiée : "
+                        + referenceBinding.questId()
+                        + " -> "
+                        + normalizedQuestId
+        );
+
+        /*
+         * Les dialogues eux-mêmes ne changent pas : la clé courante
+         * reste donc le meilleur point de réouverture et conserve
+         * naturellement l'état affiché.
+         */
+        return Optional.of(currentDialogueKey);
     }
 
     /**

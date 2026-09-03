@@ -221,12 +221,89 @@ public final class DialogueRunner {
             return;
         }
 
+        if (node.isStructural()) {
+            processStructuralNode(
+                    dialogue,
+                    session,
+                    node,
+                    transitions
+            );
+            return;
+        }
+
         processTransitions(
                 dialogue,
                 session,
                 node,
                 transitions
         );
+    }
+
+    /**
+     * Traite un node structurel sans générer de réplique PNJ artificielle.
+     */
+    private void processStructuralNode(
+            Dialogue dialogue,
+            DialogueSession session,
+            DialogueNode node,
+            List<DialogueTransition> transitions
+    ) {
+        List<DialogueTransition> autoTransitions =
+                transitions.stream()
+                        .filter(transition ->
+                                transition.getType() == DialogueTransitionType.AUTO)
+                        .toList();
+
+        List<DialogueTransition> choiceTransitions =
+                transitions.stream()
+                        .filter(transition ->
+                                transition.getType() == DialogueTransitionType.CHOICE)
+                        .toList();
+
+        if (autoTransitions.size() == 1
+                && choiceTransitions.isEmpty()) {
+            DialogueTransition transition = autoTransitions.getFirst();
+
+            Optional<DialoguePlayerReply> firstReply =
+                    navigator.findNextAvailablePlayerReply(
+                            transition,
+                            session,
+                            0
+                    );
+
+            if (firstReply.isPresent()) {
+                displayAutoPlayerReply(
+                        session,
+                        transition,
+                        firstReply.get()
+                );
+            } else {
+                followTransition(
+                        dialogue,
+                        session,
+                        transition
+                );
+            }
+            return;
+        }
+
+        if (autoTransitions.isEmpty()
+                && !choiceTransitions.isEmpty()) {
+            displayChoices(
+                    session,
+                    node,
+                    choiceTransitions
+            );
+            return;
+        }
+
+        RpgLogger.error(
+                "Node structurel ambigu dans le dialogue '"
+                        + dialogue.getKey()
+                        + "' : "
+                        + node.getKey()
+        );
+        endSession(session);
     }
 
     /**
@@ -254,47 +331,6 @@ public final class DialogueRunner {
                                         == DialogueTransitionType.CHOICE
                         )
                         .toList();
-
-        List<DialogueTransition> endTransitions =
-                transitions.stream()
-                        .filter(transition ->
-                                transition.getType()
-                                        == DialogueTransitionType.END
-                        )
-                        .toList();
-
-        /*
-         * END
-         *
-         * Le dernier node reste affiché.
-         * La session sera terminée uniquement
-         * lorsque finish() sera appelé.
-         */
-        if (!endTransitions.isEmpty()) {
-
-            if (transitions.size() > 1) {
-
-                RpgLogger.error(
-                        "Une transition END est disponible en même temps "
-                                + "qu'une autre transition dans le dialogue '"
-                                + dialogue.getKey()
-                                + "'."
-                );
-
-                endSession(
-                        session
-                );
-
-                return;
-            }
-
-            displayClose(
-                    session,
-                    node
-            );
-
-            return;
-        }
 
         /*
          * AUTO
@@ -388,6 +424,44 @@ public final class DialogueRunner {
     }
 
     /**
+     * Présente une réplique Joueur simple portée
+     * par une transition AUTO.
+     */
+    private void displayAutoPlayerReply(
+            DialogueSession session,
+            DialogueTransition transition,
+            DialoguePlayerReply reply
+    ) {
+        DialogueView view =
+                new DialogueView(
+                        "Joueur",
+                        reply.getText(),
+                        DialogueInteractionType.CONTINUE,
+                        List.of()
+                );
+
+        presenter.show(
+                session.getContext()
+                        .getPlayer(),
+                view
+        );
+
+        session.beginAutoPlayerReply(
+                transition.getKey(),
+                reply.getPosition()
+        );
+
+        RpgLogger.debug(
+                "Réplique Joueur AUTO affichée : "
+                        + session.getDialogueKey()
+                        + " | transition="
+                        + transition.getKey()
+                        + " | position="
+                        + reply.getPosition()
+        );
+    }
+
+    /**
      * Présente les choix actuellement disponibles.
      */
     private void displayChoices(
@@ -408,7 +482,9 @@ public final class DialogueRunner {
         DialogueView view =
                 new DialogueView(
                         null,
-                        node.getText(),
+                        node.isStructural()
+                                ? ""
+                                : node.getText(),
                         DialogueInteractionType.CHOICE,
                         choiceViews
                 );
@@ -428,7 +504,11 @@ public final class DialogueRunner {
     }
 
     /**
-     * Présente le dernier node avant terminaison.
+     * Compatibilité temporaire avec l'ancien flux END.
+     *
+     * <p>Les transitions persistées depuis V12 utilisent
+     * désormais AUTO / CHOICE + terminal et ne passent
+     * normalement plus par cette présentation.
      */
     private void displayClose(
             DialogueSession session,
@@ -482,6 +562,107 @@ public final class DialogueRunner {
         Dialogue dialogue =
                 session.getDialogue();
 
+        /*
+         * Une réplique Joueur AUTO est actuellement affichée.
+         *
+         * On exécute d'abord les actions propres à cette réplique,
+         * puis on recherche la prochaine réplique disponible.
+         * Les conditions de la transition ne sont pas réévaluées entre
+         * les répliques : la transition exacte reste mémorisée.
+         */
+        if (session.isAutoPlayerReplyPhase()) {
+
+            String transitionKey =
+                    session.getPendingTransitionKey();
+
+            int replyPosition =
+                    session.getPendingPlayerReplyPosition();
+
+            Optional<DialogueTransition> pendingTransition =
+                    dialogue.findTransition(
+                            transitionKey
+                    );
+
+            if (pendingTransition.isEmpty()) {
+                RpgLogger.error(
+                        "Transition AUTO en attente introuvable : "
+                                + transitionKey
+                                + " | dialogue="
+                                + dialogue.getKey()
+                );
+
+                endSession(session);
+                return false;
+            }
+
+            DialogueTransition transition =
+                    pendingTransition.get();
+
+            if (transition.getType()
+                    != DialogueTransitionType.AUTO) {
+                RpgLogger.error(
+                        "La transition en attente n'est plus AUTO : "
+                                + transition.getKey()
+                );
+
+                endSession(session);
+                return false;
+            }
+
+            Optional<DialoguePlayerReply> currentReply =
+                    transition.getPlayerReplies()
+                            .stream()
+                            .filter(reply ->
+                                    reply.getPosition()
+                                            == replyPosition
+                            )
+                            .findFirst();
+
+            if (currentReply.isEmpty()) {
+                RpgLogger.error(
+                        "Réplique Joueur en attente introuvable : transition="
+                                + transition.getKey()
+                                + " | position="
+                                + replyPosition
+                );
+
+                endSession(session);
+                return false;
+            }
+
+            executePlayerReplyActions(
+                    session,
+                    currentReply.get()
+            );
+
+            Optional<DialoguePlayerReply> nextReply =
+                    navigator.findNextAvailablePlayerReply(
+                            transition,
+                            session,
+                            replyPosition
+                    );
+
+            if (nextReply.isPresent()) {
+                displayAutoPlayerReply(
+                        session,
+                        transition,
+                        nextReply.get()
+                );
+
+                return true;
+            }
+
+            session.clearPresentationPhase();
+
+            followTransition(
+                    dialogue,
+                    session,
+                    transition
+            );
+
+            return true;
+        }
+
         List<DialogueTransition> availableTransitions =
                 navigator.getAvailableTransitions(
                         dialogue,
@@ -497,8 +678,24 @@ public final class DialogueRunner {
 
         if (transition.getType()
                 != DialogueTransitionType.AUTO) {
-
             return false;
+        }
+
+        Optional<DialoguePlayerReply> firstReply =
+                navigator.findNextAvailablePlayerReply(
+                        transition,
+                        session,
+                        0
+                );
+
+        if (firstReply.isPresent()) {
+            displayAutoPlayerReply(
+                    session,
+                    transition,
+                    firstReply.get()
+            );
+
+            return true;
         }
 
         RpgLogger.debug(
@@ -595,8 +792,10 @@ public final class DialogueRunner {
     }
 
     /**
-     * Termine un dialogue lorsque le node courant
-     * possède une transition END disponible.
+     * Compatibilité temporaire avec l'ancien protocole END.
+     *
+     * <p>Les nouvelles transitions terminales AUTO / CHOICE
+     * sont terminées directement dans followTransition().
      *
      * @param playerUuid UUID du joueur
      *
@@ -670,6 +869,30 @@ public final class DialogueRunner {
                 transition
         );
 
+        /*
+         * Une transition terminale est une destination
+         * du dialogue, indépendamment de son type AUTO
+         * ou CHOICE.
+         *
+         * Les actions de transition sont exécutées avant
+         * la fermeture de la session.
+         */
+        if (transition.isTerminal()) {
+
+            RpgLogger.debug(
+                    "Transition terminale atteinte : "
+                            + dialogue.getKey()
+                            + " | transition="
+                            + transition.getKey()
+            );
+
+            endSession(
+                    session
+            );
+
+            return;
+        }
+
         Optional<DialogueNode> nextNode =
                 navigator.getNextNode(
                         dialogue,
@@ -700,6 +923,20 @@ public final class DialogueRunner {
                 dialogue,
                 session
         );
+    }
+
+    private void executePlayerReplyActions(
+            DialogueSession session,
+            DialoguePlayerReply reply
+    ) {
+        for (Action action :
+                reply.getActions()) {
+
+            actionManager.execute(
+                    session.getContext(),
+                    action
+            );
+        }
     }
 
     private void executeTransitionActions(

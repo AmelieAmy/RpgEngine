@@ -454,7 +454,8 @@ public final class DialogueRepository {
         String sql = """
                 SELECT
                     key,
-                    text
+                    text,
+                    kind
                 FROM dialogue_node
                 WHERE dialogue_id = ?
                 ORDER BY id
@@ -478,7 +479,10 @@ public final class DialogueRepository {
                     nodes.add(
                             new DialogueNode(
                                     result.getString("key"),
-                                    result.getString("text")
+                                    result.getString("text"),
+                                    DialogueNodeKind.valueOf(
+                                            result.getString("kind")
+                                    )
                             )
                     );
                 }
@@ -507,7 +511,8 @@ public final class DialogueRepository {
                     target.key AS target_node_key,
                     dt.type,
                     dt.label,
-                    dt.position
+                    dt.position,
+                    dt.terminal
                 FROM dialogue_transition dt
                 JOIN dialogue_node source
                     ON source.id = dt.source_node_id
@@ -552,6 +557,11 @@ public final class DialogueRepository {
                                     transitionId
                             );
 
+                    List<DialoguePlayerReply> playerReplies =
+                            loadPlayerReplies(
+                                    transitionId
+                            );
+
                     transitions.add(
                             new DialogueTransition(
                                     result.getString(
@@ -566,8 +576,10 @@ public final class DialogueRepository {
                                     type,
                                     result.getString("label"),
                                     result.getInt("position"),
+                                    result.getInt("terminal") != 0,
                                     conditions,
-                                    actions
+                                    actions,
+                                    playerReplies
                             )
                     );
                 }
@@ -660,6 +672,150 @@ public final class DialogueRepository {
             ) {
                 while (result.next()) {
 
+                    actions.add(
+                            new Action(
+                                    result.getString("provider"),
+                                    result.getString("expression"),
+                                    result.getInt("position")
+                            )
+                    );
+                }
+            }
+        }
+
+        return actions;
+    }
+
+    /**
+     * Charge les répliques Joueur d'une transition AUTO.
+     */
+    private List<DialoguePlayerReply> loadPlayerReplies(
+            long transitionId
+    ) throws SQLException {
+
+        List<DialoguePlayerReply> replies =
+                new ArrayList<>();
+
+        String sql = """
+                SELECT
+                    id,
+                    text,
+                    position
+                FROM dialogue_transition_player_reply
+                WHERE transition_id = ?
+                ORDER BY position
+                """;
+
+        try (
+                PreparedStatement statement =
+                        connection.prepareStatement(sql)
+        ) {
+            statement.setLong(
+                    1,
+                    transitionId
+            );
+
+            try (
+                    ResultSet result =
+                            statement.executeQuery()
+            ) {
+                while (result.next()) {
+                    long playerReplyId =
+                            result.getLong("id");
+
+                    replies.add(
+                            new DialoguePlayerReply(
+                                    result.getString("text"),
+                                    result.getInt("position"),
+                                    loadPlayerReplyConditions(
+                                            playerReplyId
+                                    ),
+                                    loadPlayerReplyActions(
+                                            playerReplyId
+                                    )
+                            )
+                    );
+                }
+            }
+        }
+
+        return replies;
+    }
+
+    private List<Condition> loadPlayerReplyConditions(
+            long playerReplyId
+    ) throws SQLException {
+
+        List<Condition> conditions =
+                new ArrayList<>();
+
+        String sql = """
+                SELECT
+                    provider,
+                    expression
+                FROM dialogue_player_reply_condition
+                WHERE player_reply_id = ?
+                ORDER BY id
+                """;
+
+        try (
+                PreparedStatement statement =
+                        connection.prepareStatement(sql)
+        ) {
+            statement.setLong(
+                    1,
+                    playerReplyId
+            );
+
+            try (
+                    ResultSet result =
+                            statement.executeQuery()
+            ) {
+                while (result.next()) {
+                    conditions.add(
+                            new Condition(
+                                    result.getString("provider"),
+                                    result.getString("expression")
+                            )
+                    );
+                }
+            }
+        }
+
+        return conditions;
+    }
+
+    private List<Action> loadPlayerReplyActions(
+            long playerReplyId
+    ) throws SQLException {
+
+        List<Action> actions =
+                new ArrayList<>();
+
+        String sql = """
+                SELECT
+                    provider,
+                    expression,
+                    position
+                FROM dialogue_player_reply_action
+                WHERE player_reply_id = ?
+                ORDER BY position
+                """;
+
+        try (
+                PreparedStatement statement =
+                        connection.prepareStatement(sql)
+        ) {
+            statement.setLong(
+                    1,
+                    playerReplyId
+            );
+
+            try (
+                    ResultSet result =
+                            statement.executeQuery()
+            ) {
+                while (result.next()) {
                     actions.add(
                             new Action(
                                     result.getString("provider"),
@@ -832,9 +988,10 @@ public final class DialogueRepository {
                 INSERT INTO dialogue_node (
                     dialogue_id,
                     key,
-                    text
+                    text,
+                    kind
                 )
-                VALUES (?, ?, ?)
+                VALUES (?, ?, ?, ?)
                 """;
 
         for (DialogueNode node : nodes) {
@@ -859,6 +1016,11 @@ public final class DialogueRepository {
                 statement.setString(
                         3,
                         node.getText()
+                );
+
+                statement.setString(
+                        4,
+                        node.getKind().name()
                 );
 
                 statement.executeUpdate();
@@ -904,9 +1066,10 @@ public final class DialogueRepository {
                     target_node_id,
                     type,
                     label,
-                    position
+                    position,
+                    terminal
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """;
 
         for (DialogueTransition transition :
@@ -992,6 +1155,13 @@ public final class DialogueRepository {
                         transition.getPosition()
                 );
 
+                statement.setInt(
+                        8,
+                        transition.isTerminal()
+                                ? 1
+                                : 0
+                );
+
                 statement.executeUpdate();
 
                 try (
@@ -1015,6 +1185,11 @@ public final class DialogueRepository {
                     insertTransitionActions(
                             transitionId,
                             transition.getActions()
+                    );
+
+                    insertPlayerReplies(
+                            transitionId,
+                            transition.getPlayerReplies()
                     );
                 }
             }
@@ -1085,6 +1260,156 @@ public final class DialogueRepository {
                 statement.setLong(
                         1,
                         transitionId
+                );
+
+                statement.setString(
+                        2,
+                        action.getProvider()
+                );
+
+                statement.setString(
+                        3,
+                        action.getExpression()
+                );
+
+                statement.setInt(
+                        4,
+                        action.getPosition()
+                );
+
+                statement.executeUpdate();
+            }
+        }
+    }
+
+    private void insertPlayerReplies(
+            long transitionId,
+            List<DialoguePlayerReply> replies
+    ) throws SQLException {
+
+        String sql = """
+                INSERT INTO dialogue_transition_player_reply (
+                    transition_id,
+                    text,
+                    position
+                )
+                VALUES (?, ?, ?)
+                """;
+
+        for (DialoguePlayerReply reply : replies) {
+            try (
+                    PreparedStatement statement =
+                            connection.prepareStatement(
+                                    sql,
+                                    Statement.RETURN_GENERATED_KEYS
+                            )
+            ) {
+                statement.setLong(
+                        1,
+                        transitionId
+                );
+
+                statement.setString(
+                        2,
+                        reply.getText()
+                );
+
+                statement.setInt(
+                        3,
+                        reply.getPosition()
+                );
+
+                statement.executeUpdate();
+
+                try (
+                        ResultSet generatedKeys =
+                                statement.getGeneratedKeys()
+                ) {
+                    if (!generatedKeys.next()) {
+                        throw new SQLException(
+                                "Impossible de récupérer l'id d'une réplique Joueur."
+                        );
+                    }
+
+                    long playerReplyId =
+                            generatedKeys.getLong(1);
+
+                    insertPlayerReplyConditions(
+                            playerReplyId,
+                            reply.getConditions()
+                    );
+
+                    insertPlayerReplyActions(
+                            playerReplyId,
+                            reply.getActions()
+                    );
+                }
+            }
+        }
+    }
+
+    private void insertPlayerReplyConditions(
+            long playerReplyId,
+            List<Condition> conditions
+    ) throws SQLException {
+
+        String sql = """
+                INSERT INTO dialogue_player_reply_condition (
+                    player_reply_id,
+                    provider,
+                    expression
+                )
+                VALUES (?, ?, ?)
+                """;
+
+        for (Condition condition : conditions) {
+            try (
+                    PreparedStatement statement =
+                            connection.prepareStatement(sql)
+            ) {
+                statement.setLong(
+                        1,
+                        playerReplyId
+                );
+
+                statement.setString(
+                        2,
+                        condition.getProvider()
+                );
+
+                statement.setString(
+                        3,
+                        condition.getExpression()
+                );
+
+                statement.executeUpdate();
+            }
+        }
+    }
+
+    private void insertPlayerReplyActions(
+            long playerReplyId,
+            List<Action> actions
+    ) throws SQLException {
+
+        String sql = """
+                INSERT INTO dialogue_player_reply_action (
+                    player_reply_id,
+                    provider,
+                    expression,
+                    position
+                )
+                VALUES (?, ?, ?, ?)
+                """;
+
+        for (Action action : actions) {
+            try (
+                    PreparedStatement statement =
+                            connection.prepareStatement(sql)
+            ) {
+                statement.setLong(
+                        1,
+                        playerReplyId
                 );
 
                 statement.setString(

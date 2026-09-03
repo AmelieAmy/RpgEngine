@@ -150,4 +150,46 @@ public final class ConditionRepository {
             return false;
         }
     }
+    /**
+     * Remplace l'expression d'une condition QUEST précise
+     * appartenant à un trigger.
+     *
+     * La clause sur l'ancienne expression évite de modifier
+     * une éventuelle autre condition QUEST du même trigger.
+     */
+    public boolean updateQuestExpression(
+            int triggerId,
+            String oldExpression,
+            String newExpression
+    ) {
+        String sql = """
+                UPDATE condition
+                SET expression = ?
+                WHERE trigger_id = ?
+                  AND UPPER(provider) = 'QUEST'
+                  AND expression = ?
+                """;
+
+        try (
+                PreparedStatement statement =
+                        connection.prepareStatement(sql)
+        ) {
+            statement.setString(1, newExpression);
+            statement.setInt(2, triggerId);
+            statement.setString(3, oldExpression);
+
+            return statement.executeUpdate() == 1;
+
+        } catch (SQLException e) {
+            RpgLogger.error(
+                    "Impossible de modifier la condition QUEST du trigger "
+                            + triggerId
+                            + " : "
+                            + e.getMessage()
+            );
+            return false;
+        }
+    }
+
+
 }

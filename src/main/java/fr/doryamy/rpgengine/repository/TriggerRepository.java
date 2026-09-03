@@ -264,6 +264,138 @@ public final class TriggerRepository {
     }
 
     /**
+     * Modifie le type et la cible de plusieurs triggers.
+     *
+     * <p>L'opération est transactionnelle afin que les
+     * variantes d'un même scénario restent synchronisées.
+     */
+    public boolean updateTargets(
+            List<Integer> triggerIds,
+            TriggerType type,
+            String targetId
+    ) {
+        if (triggerIds == null
+                || triggerIds.isEmpty()
+                || type == null
+                || targetId == null
+                || targetId.isBlank()) {
+
+            return false;
+        }
+
+        String sql = """
+                UPDATE trigger
+                SET type = ?,
+                    target_id = ?
+                WHERE id = ?
+                """;
+
+        boolean previousAutoCommit;
+
+        try {
+            previousAutoCommit =
+                    connection.getAutoCommit();
+
+        } catch (SQLException e) {
+
+            RpgLogger.error(
+                    "Impossible de lire l'état transactionnel : "
+                            + e.getMessage()
+            );
+
+            return false;
+        }
+
+        try {
+            connection.setAutoCommit(
+                    false
+            );
+
+            try (
+                    PreparedStatement statement =
+                            connection.prepareStatement(
+                                    sql
+                            )
+            ) {
+                for (int triggerId :
+                        triggerIds) {
+
+                    statement.setString(
+                            1,
+                            type.name()
+                    );
+
+                    statement.setString(
+                            2,
+                            targetId
+                    );
+
+                    statement.setInt(
+                            3,
+                            triggerId
+                    );
+
+                    statement.addBatch();
+                }
+
+                int[] results =
+                        statement.executeBatch();
+
+                for (int result :
+                        results) {
+
+                    if (result != 1
+                            && result != Statement.SUCCESS_NO_INFO) {
+
+                        connection.rollback();
+
+                        return false;
+                    }
+                }
+            }
+
+            connection.commit();
+
+            return true;
+
+        } catch (SQLException e) {
+
+            try {
+                connection.rollback();
+
+            } catch (SQLException rollbackException) {
+
+                RpgLogger.error(
+                        "Impossible d'annuler la modification partielle : "
+                                + rollbackException.getMessage()
+                );
+            }
+
+            RpgLogger.error(
+                    "Impossible de modifier les triggers : "
+                            + e.getMessage()
+            );
+
+            return false;
+
+        } finally {
+
+            try {
+                connection.setAutoCommit(
+                        previousAutoCommit
+                );
+
+            } catch (SQLException e) {
+
+                RpgLogger.error(
+                        "Impossible de restaurer l'état transactionnel : "
+                                + e.getMessage()
+                );
+            }
+        }
+    }
+
+    /**
      * Supprime un trigger.
      *
      * <p>Les actions et conditions associées

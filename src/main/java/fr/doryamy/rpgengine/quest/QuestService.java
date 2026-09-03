@@ -1,5 +1,6 @@
 package fr.doryamy.rpgengine.quest;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -38,6 +39,14 @@ public interface QuestService {
             UUID playerUuid,
             String questId
     );
+
+    /**
+     * Retourne les quêtes disponibles dans
+     * le système externe.
+     *
+     * @return projections légères des quêtes
+     */
+    List<QuestSummary> findAll();
 
     /**
      * Retourne le nom affichable d'une quête externe.

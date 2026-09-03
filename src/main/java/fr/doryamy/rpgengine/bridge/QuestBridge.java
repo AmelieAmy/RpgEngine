@@ -1,8 +1,12 @@
 package fr.doryamy.rpgengine.bridge;
 
+import fr.doryamy.rpgengine.quest.QuestSummary;
 import fr.doryamy.rpgengine.util.RpgLogger;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -23,6 +27,7 @@ public final class QuestBridge {
     private Method getQuestStateMethod;
     private Method startQuestMethod;
     private Method getQuestDisplayNameMethod;
+    private Method getAvailableQuestsMethod;
 
     /**
      * Résout les méthodes de l'API NeoForge
@@ -55,6 +60,11 @@ public final class QuestBridge {
                 bridgeClass.getMethod(
                         "getQuestDisplayName",
                         String.class
+                );
+
+        getAvailableQuestsMethod =
+                bridgeClass.getMethod(
+                        "getAvailableQuests"
                 );
     }
 
@@ -141,6 +151,94 @@ public final class QuestBridge {
     }
 
     /**
+     * Retourne les quêtes disponibles via NeoForge.
+     */
+    public List<QuestSummary> getAvailableQuests() {
+        if (getAvailableQuestsMethod == null) {
+            return List.of();
+        }
+
+        try {
+            Object result =
+                    getAvailableQuestsMethod.invoke(
+                            null
+                    );
+
+            if (!(result instanceof List<?> values)) {
+                return List.of();
+            }
+
+            List<QuestSummary> quests =
+                    new ArrayList<>();
+
+            for (Object value :
+                    values) {
+
+                if (!(value instanceof Map<?, ?> map)) {
+                    continue;
+                }
+
+                Object idValue =
+                        map.get(
+                                "id"
+                        );
+
+                Object nameValue =
+                        map.get(
+                                "name"
+                        );
+
+                Object descriptionValue =
+                        map.get(
+                                "description"
+                        );
+
+                if (!(idValue instanceof String id)
+                        || !(nameValue instanceof String name)) {
+
+                    continue;
+                }
+
+                String description =
+                        descriptionValue instanceof String text
+                                ? text
+                                : "";
+
+                quests.add(
+                        new QuestSummary(
+                                id,
+                                name,
+                                description
+                        )
+                );
+            }
+
+            return List.copyOf(
+                    quests
+            );
+
+        } catch (ReflectiveOperationException e) {
+
+            Throwable cause =
+                    e.getCause() != null
+                            ? e.getCause()
+                            : e;
+
+            RpgLogger.error(
+                    "Impossible de charger la liste des quêtes via NeoForge : "
+                            + cause.getClass()
+                            .getSimpleName()
+                            + " | "
+                            + cause.getMessage()
+            );
+
+            cause.printStackTrace();
+
+            return List.of();
+        }
+    }
+
+    /**
      * Retourne le nom affichable d'une quête
      * via le mod NeoForge.
      *
@@ -196,6 +294,9 @@ public final class QuestBridge {
                 null;
 
         getQuestDisplayNameMethod =
+                null;
+
+        getAvailableQuestsMethod =
                 null;
     }
 }

@@ -52,7 +52,12 @@ public final class DialogueValidator {
                 errors
         );
 
-        validateEndTransitions(
+        validatePlayerReplies(
+                dialogue,
+                errors
+        );
+
+        validateTerminalTransitions(
                 dialogue,
                 errors
         );
@@ -245,10 +250,23 @@ public final class DialogueValidator {
             }
 
             /*
-             * Node cible.
+             * Destination.
+             *
+             * La nature de la transition (AUTO / CHOICE)
+             * est indépendante du fait qu'elle termine
+             * ou non le dialogue.
              */
-            if (transition.getType()
-                    != DialogueTransitionType.END) {
+            if (transition.isTerminal()) {
+
+                if (target != null) {
+                    errors.add(
+                            "Une transition terminale depuis '"
+                                    + source
+                                    + "' ne doit pas posséder de cible."
+                    );
+                }
+
+            } else {
 
                 if (target == null
                         || target.isBlank()) {
@@ -301,19 +319,38 @@ public final class DialogueValidator {
                                 "Une transition CHOICE doit posséder un label."
                         );
                     }
+
+                    if (!transition.getPlayerReplies().isEmpty()) {
+                        errors.add(
+                                "Une transition CHOICE ne doit pas posséder de répliques Joueur séquentielles."
+                        );
+                    }
                 }
 
+                /*
+                 * Compatibilité temporaire avec les anciens
+                 * objets encore susceptibles d'utiliser END.
+                 *
+                 * Après la migration V12, les transitions
+                 * persistées END sont devenues AUTO terminales.
+                 */
                 case END -> {
 
-                    if (target != null) {
+                    if (!transition.isTerminal()) {
                         errors.add(
-                                "Une transition END ne doit pas posséder de cible."
+                                "Une ancienne transition END doit être terminale."
                         );
                     }
 
                     if (transition.getLabel() != null) {
                         errors.add(
                                 "Une transition END ne doit pas posséder de label."
+                        );
+                    }
+
+                    if (!transition.getPlayerReplies().isEmpty()) {
+                        errors.add(
+                                "Une transition END ne doit pas posséder de répliques Joueur."
                         );
                     }
                 }
@@ -358,25 +395,95 @@ public final class DialogueValidator {
     }
 
     /**
-     * Vérifie qu'au moins une fin explicite
-     * existe dans le dialogue.
+     * Vérifie la structure des répliques Joueur.
      */
-    private void validateEndTransitions(
+    private void validatePlayerReplies(
             Dialogue dialogue,
             List<String> errors
     ) {
-        boolean hasEnd =
+        for (DialogueTransition transition :
+                dialogue.getTransitions()) {
+
+            Set<Integer> replyPositions =
+                    new HashSet<>();
+
+            for (DialoguePlayerReply reply :
+                    transition.getPlayerReplies()) {
+
+                if (reply.getText().isBlank()) {
+                    errors.add(
+                            "Une réplique Joueur de la transition '"
+                                    + transition.getKey()
+                                    + "' possède un texte vide."
+                    );
+                }
+
+                if (reply.getPosition() <= 0) {
+                    errors.add(
+                            "Une réplique Joueur de la transition '"
+                                    + transition.getKey()
+                                    + "' possède une position invalide : "
+                                    + reply.getPosition()
+                    );
+                }
+
+                if (!replyPositions.add(
+                        reply.getPosition()
+                )) {
+                    errors.add(
+                            "Position de réplique Joueur dupliquée sur la transition '"
+                                    + transition.getKey()
+                                    + "' : "
+                                    + reply.getPosition()
+                    );
+                }
+
+                Set<Integer> actionPositions =
+                        new HashSet<>();
+
+                for (fr.doryamy.rpgengine.model.Action action :
+                        reply.getActions()) {
+                    if (action.getPosition() <= 0) {
+                        errors.add(
+                                "Une action de réplique Joueur possède une position invalide sur la transition '"
+                                        + transition.getKey()
+                                        + "'."
+                        );
+                    }
+
+                    if (!actionPositions.add(
+                            action.getPosition()
+                    )) {
+                        errors.add(
+                                "Position d'action dupliquée dans une réplique Joueur de la transition '"
+                                        + transition.getKey()
+                                        + "' : "
+                                        + action.getPosition()
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Vérifie qu'au moins une destination terminale
+     * existe dans le dialogue.
+     */
+    private void validateTerminalTransitions(
+            Dialogue dialogue,
+            List<String> errors
+    ) {
+        boolean hasTerminal =
                 dialogue.getTransitions()
                         .stream()
                         .anyMatch(
-                                transition ->
-                                        transition.getType()
-                                                == DialogueTransitionType.END
+                                DialogueTransition::isTerminal
                         );
 
-        if (!hasEnd) {
+        if (!hasTerminal) {
             errors.add(
-                    "Le dialogue ne possède aucune transition END."
+                    "Le dialogue ne possède aucune transition terminale."
             );
         }
     }
@@ -446,9 +553,7 @@ public final class DialogueValidator {
                 continue;
             }
 
-            if (transition.getType()
-                    == DialogueTransitionType.END) {
-
+            if (transition.isTerminal()) {
                 continue;
             }
 
@@ -543,6 +648,10 @@ public final class DialogueValidator {
             if (transition.getType()
                     != DialogueTransitionType.AUTO) {
 
+                continue;
+            }
+
+            if (transition.isTerminal()) {
                 continue;
             }
 

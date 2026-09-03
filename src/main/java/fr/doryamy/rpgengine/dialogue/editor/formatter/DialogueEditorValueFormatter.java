@@ -70,9 +70,76 @@ public final class DialogueEditorValueFormatter {
             return provider;
         }
 
+        if ("QUEST".equalsIgnoreCase(
+                provider
+        )) {
+
+            String formatted =
+                    formatQuestCondition(
+                            expression
+                    );
+
+            if (formatted != null) {
+                return formatted;
+            }
+        }
+
         return provider
                 + " : "
                 + expression;
+    }
+
+    private String formatQuestCondition(
+            String expression
+    ) {
+
+        int separator =
+                expression.indexOf(
+                        "=="
+                );
+
+        if (separator <= 0
+                || separator >= expression.length() - 2) {
+
+            return null;
+        }
+
+        String questId =
+                expression.substring(
+                        0,
+                        separator
+                ).trim();
+
+        String state =
+                expression.substring(
+                                separator + 2
+                        ).trim()
+                        .toUpperCase();
+
+        if (questId.isBlank()) {
+            return null;
+        }
+
+        String stateLabel =
+                switch (state) {
+                    case "NOT_STARTED" -> "Non commencée";
+                    case "ACTIVE" -> "En cours";
+                    case "COMPLETED" -> "Terminée";
+                    default -> null;
+                };
+
+        if (stateLabel == null) {
+            return null;
+        }
+
+        String questName =
+                questService.getDisplayName(
+                        questId
+                );
+
+        return questName
+                + " : "
+                + stateLabel;
     }
 
     private String formatQuestAction(

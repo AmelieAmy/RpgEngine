@@ -96,6 +96,22 @@ public final class TriggerService {
     }
 
     /**
+     * Modifie la cible d'un ensemble de triggers appartenant
+     * au même scénario éditorial.
+     */
+    public boolean updateTargets(
+            List<Integer> triggerIds,
+            TriggerType type,
+            String targetId
+    ) {
+        return triggerRepository.updateTargets(
+                triggerIds,
+                type,
+                targetId
+        );
+    }
+
+    /**
      * Nettoie un trigger partiellement créé.
      *
      * <p>Grâce aux cascades SQLite, supprimer

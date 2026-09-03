@@ -10,10 +10,12 @@ import java.util.List;
  * @param key           clé métier
  * @param type          type de transition
  * @param targetNodeKey node cible éventuel
- * @param label         texte d'un choix joueur
+ * @param label         texte d'un choix joueur, uniquement pour CHOICE
  * @param position      ordre de la transition
- * @param conditions    conditions associées
- * @param actions       actions associées
+ * @param terminal      true si la transition termine le dialogue
+ * @param conditions    conditions associées à la transition
+ * @param actions       actions associées à la transition
+ * @param playerReplies répliques Joueur séquentielles d'une transition AUTO
  */
 public record DialogueEditorTransitionView(
         String key,
@@ -21,23 +23,26 @@ public record DialogueEditorTransitionView(
         String targetNodeKey,
         String label,
         int position,
+        boolean terminal,
         List<DialogueEditorConditionView> conditions,
-        List<DialogueEditorActionView> actions
+        List<DialogueEditorActionView> actions,
+        List<DialogueEditorPlayerReplyView> playerReplies
 ) {
 
     public DialogueEditorTransitionView {
         conditions =
                 conditions == null
                         ? List.of()
-                        : List.copyOf(
-                        conditions
-                );
+                        : List.copyOf(conditions);
 
         actions =
                 actions == null
                         ? List.of()
-                        : List.copyOf(
-                        actions
-                );
+                        : List.copyOf(actions);
+
+        playerReplies =
+                playerReplies == null
+                        ? List.of()
+                        : List.copyOf(playerReplies);
     }
 }
