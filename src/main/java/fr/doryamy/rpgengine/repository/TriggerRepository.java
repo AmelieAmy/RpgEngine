@@ -6,11 +6,7 @@ import fr.doryamy.rpgengine.model.Trigger;
 import fr.doryamy.rpgengine.model.TriggerType;
 import fr.doryamy.rpgengine.util.RpgLogger;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.OptionalInt;
@@ -387,6 +383,128 @@ public final class TriggerRepository {
 
             } catch (SQLException e) {
 
+                RpgLogger.error(
+                        "Impossible de restaurer l'état transactionnel : "
+                                + e.getMessage()
+                );
+            }
+        }
+    }
+
+    /**
+     * Supprime transactionnellement toutes les actions correspondant
+     * exactement à une référence provider/expression.
+     *
+     * <p>Un trigger touché qui ne possède plus aucune action est supprimé ;
+     * ses conditions éventuelles suivent la cascade SQLite. Un trigger qui
+     * conserve d'autres actions reste intact.
+     */
+    public boolean removeActionReferences(
+            String provider,
+            String expression
+    ) {
+        if (provider == null
+                || provider.isBlank()
+                || expression == null) {
+            return false;
+        }
+
+        String findSql = """
+                SELECT DISTINCT trigger_id
+                FROM action
+                WHERE provider = ?
+                  AND expression = ?
+                ORDER BY trigger_id
+                """;
+
+        String deleteActionsSql = """
+                DELETE FROM action
+                WHERE provider = ?
+                  AND expression = ?
+                """;
+
+        String deleteEmptyTriggerSql = """
+                DELETE FROM trigger
+                WHERE id = ?
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM action
+                      WHERE action.trigger_id = trigger.id
+                  )
+                """;
+
+        boolean previousAutoCommit;
+
+        try {
+            previousAutoCommit = connection.getAutoCommit();
+        } catch (SQLException e) {
+            RpgLogger.error(
+                    "Impossible de lire l'état transactionnel : "
+                            + e.getMessage()
+            );
+            return false;
+        }
+
+        try {
+            connection.setAutoCommit(false);
+
+            List<Integer> affectedTriggerIds = new ArrayList<>();
+
+            try (PreparedStatement statement = connection.prepareStatement(findSql)) {
+                statement.setString(1, provider);
+                statement.setString(2, expression);
+
+                try (ResultSet result = statement.executeQuery()) {
+                    while (result.next()) {
+                        affectedTriggerIds.add(result.getInt("trigger_id"));
+                    }
+                }
+            }
+
+            try (PreparedStatement statement = connection.prepareStatement(deleteActionsSql)) {
+                statement.setString(1, provider);
+                statement.setString(2, expression);
+                statement.executeUpdate();
+            }
+
+            try (PreparedStatement statement = connection.prepareStatement(deleteEmptyTriggerSql)) {
+                for (int triggerId : affectedTriggerIds) {
+                    statement.setInt(1, triggerId);
+                    statement.addBatch();
+                }
+
+                if (!affectedTriggerIds.isEmpty()) {
+                    statement.executeBatch();
+                }
+            }
+
+            connection.commit();
+            return true;
+
+        } catch (SQLException e) {
+            try {
+                connection.rollback();
+            } catch (SQLException rollbackException) {
+                RpgLogger.error(
+                        "Impossible d'annuler la suppression des références d'action : "
+                                + rollbackException.getMessage()
+                );
+            }
+
+            RpgLogger.error(
+                    "Impossible de supprimer les références d'action "
+                            + provider
+                            + " / "
+                            + expression
+                            + " : "
+                            + e.getMessage()
+            );
+            return false;
+
+        } finally {
+            try {
+                connection.setAutoCommit(previousAutoCommit);
+            } catch (SQLException e) {
                 RpgLogger.error(
                         "Impossible de restaurer l'état transactionnel : "
                                 + e.getMessage()

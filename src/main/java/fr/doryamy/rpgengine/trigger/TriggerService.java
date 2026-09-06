@@ -112,6 +112,21 @@ public final class TriggerService {
     }
 
     /**
+     * Supprime toutes les actions correspondant exactement à une référence
+     * provider/expression. Les triggers devenus sans action sont supprimés
+     * par le repository dans la même transaction.
+     */
+    public boolean removeActionReferences(
+            String provider,
+            String expression
+    ) {
+        return triggerRepository.removeActionReferences(
+                provider,
+                expression
+        );
+    }
+
+    /**
      * Nettoie un trigger partiellement créé.
      *
      * <p>Grâce aux cascades SQLite, supprimer

@@ -1,35 +1,24 @@
 package fr.doryamy.rpgengine.dialogue;
 
 import fr.doryamy.rpgengine.action.ActionManager;
-import fr.doryamy.rpgengine.dialogue.presentation.DialogueChoiceView;
-import fr.doryamy.rpgengine.dialogue.presentation.DialogueInteractionType;
-import fr.doryamy.rpgengine.dialogue.presentation.DialoguePresenter;
-import fr.doryamy.rpgengine.dialogue.presentation.DialogueView;
-import fr.doryamy.rpgengine.model.Action;
+import fr.doryamy.rpgengine.dialogue.runtime.view.DialogueChoiceView;
+import fr.doryamy.rpgengine.dialogue.runtime.view.DialogueInteractionType;
+import fr.doryamy.rpgengine.dialogue.runtime.view.DialoguePresenter;
+import fr.doryamy.rpgengine.dialogue.runtime.view.DialogueView;
 import fr.doryamy.rpgengine.trigger.TriggerContext;
 import fr.doryamy.rpgengine.util.RpgLogger;
-import org.bukkit.entity.Player;
 
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 
 /**
- * Orchestre l'exécution runtime des dialogues de RPGEngine.
+ * Orchestre l'exécution runtime des dialogues.
  *
- * Le runner constitue l'autorité serveur sur la progression
- * d'un dialogue. Les interactions reçues du joueur ne font
- * qu'appeler {@link #advance(UUID)}, {@link #choose(UUID, int)}
- * ou {@link #finish(UUID)}.
- *
- * Elle délègue :
- *   la validation à {@link DialogueValidator}
- *   la navigation à {@link DialogueNavigator}
- *   les sessions à {@link DialogueSessionManager}
- *   les actions à {@link ActionManager}
- *   la présentation à {@link DialoguePresenter}
- *
- *  Le runner ne dépend d'aucune technologie cliente.
+ * <p>Le Runner :
+ * valide le dialogue,
+ * crée et fait progresser les sessions,
+ * délègue les Conditions au Navigator,
+ * délègue les Actions à ActionManager
+ * et délègue l'affichage au DialoguePresenter.
  */
 public final class DialogueRunner {
 
@@ -46,47 +35,72 @@ public final class DialogueRunner {
             ActionManager actionManager,
             DialoguePresenter presenter
     ) {
-        this.validator = validator;
-        this.navigator = navigator;
-        this.sessionManager = sessionManager;
-        this.actionManager = actionManager;
-        this.presenter = presenter;
+
+        this.validator =
+                Objects.requireNonNull(
+                        validator,
+                        "validator"
+                );
+
+        this.navigator =
+                Objects.requireNonNull(
+                        navigator,
+                        "navigator"
+                );
+
+        this.sessionManager =
+                Objects.requireNonNull(
+                        sessionManager,
+                        "sessionManager"
+                );
+
+        this.actionManager =
+                Objects.requireNonNull(
+                        actionManager,
+                        "actionManager"
+                );
+
+        this.presenter =
+                Objects.requireNonNull(
+                        presenter,
+                        "presenter"
+                );
     }
 
     /**
-     * Démarre un dialogue.
-     *
-     * @param context contexte d'exécution
-     * @param dialogue dialogue à démarrer
+     * Démarre un dialogue pour le joueur
+     * contenu dans le TriggerContext.
      */
     public void start(
-            TriggerContext context,
-            Dialogue dialogue
+            Dialogue dialogue,
+            TriggerContext context
     ) {
+
+        Objects.requireNonNull(
+                dialogue,
+                "dialogue"
+        );
+
+        Objects.requireNonNull(
+                context,
+                "context"
+        );
+
         DialogueValidationResult validation =
                 validator.validate(
                         dialogue
                 );
 
         if (!validation.isValid()) {
-
-            RpgLogger.error(
-                    "Impossible de démarrer le dialogue '"
-                            + dialogue.getKey()
-                            + "' : structure invalide."
+            throw new IllegalArgumentException(
+                    "Impossible de démarrer le dialogue "
+                            + dialogue.key()
+                            + " : "
+                            + String.join(
+                            " | ",
+                            validation.errors()
+                    )
             );
-
-            validation.getErrors()
-                    .forEach(error ->
-                            RpgLogger.error(
-                                    "Dialogue '"
-                                            + dialogue.getKey()
-                                            + "' : "
-                                            + error
-                            )
-                    );
-
-            return;
         }
 
         DialogueSession session =
@@ -95,890 +109,477 @@ public final class DialogueRunner {
                         context
                 );
 
-        RpgLogger.debug(
-                "Dialogue démarré : "
-                        + dialogue.getKey()
-                        + " | joueur="
-                        + context.getPlayer()
-                        .getName()
-        );
-
-        processCurrentNode(
-                dialogue,
+        processUntilInteraction(
                 session
         );
     }
 
     /**
-     * Prévisualise le node de départ
-     * sans créer de session runtime.
-     *
-     * La preview reste un outil d'administration
-     * et n'utilise pas le presenter runtime.
+     * Traite la réponse CONTINUE du joueur.
      */
-    public void preview(
-            Player player,
-            Dialogue dialogue
+    public void continueDialogue(
+            UUID playerUuid
     ) {
-        DialogueValidationResult validation =
-                validator.validate(
-                        dialogue
-                );
 
-        if (!validation.isValid()) {
-
-            player.sendMessage(
-                    "Le dialogue est invalide."
-            );
-
-            validation.getErrors()
-                    .forEach(error ->
-                            player.sendMessage(
-                                    "- " + error
-                            )
-                    );
-
-            return;
-        }
-
-        Optional<DialogueNode> startNode =
-                dialogue.getStartNode();
-
-        if (startNode.isEmpty()) {
-
-            player.sendMessage(
-                    "Node de départ introuvable."
-            );
-
-            return;
-        }
-
-        player.sendMessage(
-                startNode.get()
-                        .getText()
+        Objects.requireNonNull(
+                playerUuid,
+                "playerUuid"
         );
 
-        RpgLogger.debug(
-                "Prévisualisation du dialogue '"
-                        + dialogue.getKey()
-                        + "' pour "
-                        + player.getName()
-        );
-    }
-
-    /**
-     * Analyse le node courant et construit
-     * son état de présentation.
-     */
-    private void processCurrentNode(
-            Dialogue dialogue,
-            DialogueSession session
-    ) {
-        Optional<DialogueNode> currentNode =
-                dialogue.findNode(
-                        session.getCurrentNodeKey()
+        DialogueSession session =
+                sessionManager.require(
+                        playerUuid
                 );
 
-        if (currentNode.isEmpty()) {
-
-            RpgLogger.error(
-                    "Node courant introuvable : "
-                            + session.getCurrentNodeKey()
-                            + " | dialogue="
-                            + dialogue.getKey()
-            );
-
-            endSession(
-                    session
-            );
-
-            return;
-        }
-
-        DialogueNode node =
-                currentNode.get();
-
-        List<DialogueTransition> transitions =
-                navigator.getAvailableTransitions(
-                        dialogue,
+        DialogueElement current =
+                currentElement(
                         session
                 );
 
-        if (transitions.isEmpty()) {
-
-            RpgLogger.error(
-                    "Aucune transition disponible depuis le node '"
-                            + node.getKey()
-                            + "' du dialogue '"
-                            + dialogue.getKey()
-                            + "'."
+        if (!(current instanceof DialogueReply reply)) {
+            throw new IllegalStateException(
+                    "CONTINUE reçu alors que l'élément courant "
+                            + current.key()
+                            + " n'est pas une réplique."
             );
-
-            endSession(
-                    session
-            );
-
-            return;
         }
 
-        if (node.isStructural()) {
-            processStructuralNode(
-                    dialogue,
-                    session,
-                    node,
-                    transitions
-            );
-            return;
-        }
+        session.acceptContinue();
 
-        processTransitions(
-                dialogue,
-                session,
-                node,
-                transitions
+        executeActions(
+                session.context(),
+                reply.rules()
+        );
+
+        session.moveTo(
+                navigator.continuationOf(
+                        session.dialogue()
+                                .graph(),
+                        reply.key()
+                )
+        );
+
+        processUntilInteraction(
+                session
         );
     }
 
     /**
-     * Traite un node structurel sans générer de réplique PNJ artificielle.
+     * Traite la sélection d'un choix.
      */
-    private void processStructuralNode(
-            Dialogue dialogue,
-            DialogueSession session,
-            DialogueNode node,
-            List<DialogueTransition> transitions
+    public void choose(
+            UUID playerUuid,
+            DialogueElementKey choiceKey
     ) {
-        List<DialogueTransition> autoTransitions =
-                transitions.stream()
-                        .filter(transition ->
-                                transition.getType() == DialogueTransitionType.AUTO)
-                        .toList();
 
-        List<DialogueTransition> choiceTransitions =
-                transitions.stream()
-                        .filter(transition ->
-                                transition.getType() == DialogueTransitionType.CHOICE)
-                        .toList();
-
-        if (autoTransitions.size() == 1
-                && choiceTransitions.isEmpty()) {
-            DialogueTransition transition = autoTransitions.getFirst();
-
-            Optional<DialoguePlayerReply> firstReply =
-                    navigator.findNextAvailablePlayerReply(
-                            transition,
-                            session,
-                            0
-                    );
-
-            if (firstReply.isPresent()) {
-                displayAutoPlayerReply(
-                        session,
-                        transition,
-                        firstReply.get()
-                );
-            } else {
-                followTransition(
-                        dialogue,
-                        session,
-                        transition
-                );
-            }
-            return;
-        }
-
-        if (autoTransitions.isEmpty()
-                && !choiceTransitions.isEmpty()) {
-            displayChoices(
-                    session,
-                    node,
-                    choiceTransitions
-            );
-            return;
-        }
-
-        RpgLogger.error(
-                "Node structurel ambigu dans le dialogue '"
-                        + dialogue.getKey()
-                        + "' : "
-                        + node.getKey()
+        Objects.requireNonNull(
+                playerUuid,
+                "playerUuid"
         );
-        endSession(session);
-    }
 
-    /**
-     * Détermine le mode d'interaction
-     * correspondant aux transitions disponibles.
-     */
-    private void processTransitions(
-            Dialogue dialogue,
-            DialogueSession session,
-            DialogueNode node,
-            List<DialogueTransition> transitions
-    ) {
-        List<DialogueTransition> autoTransitions =
-                transitions.stream()
-                        .filter(transition ->
-                                transition.getType()
-                                        == DialogueTransitionType.AUTO
-                        )
-                        .toList();
+        Objects.requireNonNull(
+                choiceKey,
+                "choiceKey"
+        );
 
-        List<DialogueTransition> choiceTransitions =
-                transitions.stream()
-                        .filter(transition ->
-                                transition.getType()
-                                        == DialogueTransitionType.CHOICE
-                        )
-                        .toList();
+        DialogueSession session =
+                sessionManager.require(
+                        playerUuid
+                );
 
         /*
-         * AUTO
-         *
-         * AUTO signifie qu'il n'existe aucune
-         * décision narrative.
-         *
-         * La progression visuelle attend toutefois
-         * une action CONTINUE du joueur.
+         * acceptChoice valide notamment que cette clé
+         * faisait partie des choix réellement présentés.
          */
-        if (!autoTransitions.isEmpty()) {
+        session.acceptChoice(
+                choiceKey
+        );
 
-            if (autoTransitions.size() > 1
-                    || !choiceTransitions.isEmpty()) {
+        DialogueElement selected =
+                session.dialogue()
+                        .graph()
+                        .require(
+                                choiceKey
+                        );
 
-                RpgLogger.error(
-                        "Transitions ambiguës depuis le node '"
-                                + session.getCurrentNodeKey()
-                                + "' du dialogue '"
-                                + dialogue.getKey()
-                                + "'."
+        if (!(selected instanceof DialogueChoice choice)) {
+            throw new IllegalStateException(
+                    "Le choix présenté "
+                            + choiceKey
+                            + " n'est pas un DialogueChoice."
+            );
+        }
+
+        executeActions(
+                session.context(),
+                choice.rules()
+        );
+
+        session.moveTo(
+                navigator.continuationOf(
+                        session.dialogue()
+                                .graph(),
+                        choice.key()
+                )
+        );
+
+        processUntilInteraction(
+                session
+        );
+    }
+
+    /**
+     * Ferme explicitement le dialogue actif
+     * du joueur.
+     */
+    public void close(
+            UUID playerUuid
+    ) {
+
+        Objects.requireNonNull(
+                playerUuid,
+                "playerUuid"
+        );
+
+        sessionManager.remove(
+                        playerUuid
+                )
+                .ifPresent(session ->
+                        presenter.close(
+                                session.context()
+                                        .getPlayer()
+                        )
+                );
+    }
+
+    /**
+     * Fait progresser automatiquement la session
+     * jusqu'à ce qu'une interaction joueur soit
+     * nécessaire ou que le dialogue se termine.
+     */
+    private void processUntilInteraction(
+            DialogueSession session
+    ) {
+
+        Set<DialogueElementKey> automaticallyVisited =
+                new HashSet<>();
+
+        while (true) {
+
+            DialogueElement current =
+                    currentElement(
+                            session
+                    );
+
+            /*
+             * Si le même élément est revisité sans
+             * qu'aucune interaction n'ait été présentée,
+             * le contexte courant produit une boucle
+             * automatique impossible à résoudre.
+             */
+            if (!automaticallyVisited.add(
+                    current.key()
+            )) {
+
+                failSession(
+                        session,
+                        "Boucle automatique détectée sur l'élément "
+                                + current.key()
+                                + "."
                 );
 
-                endSession(
+                return;
+            }
+
+            if (current instanceof DialogueStart start) {
+
+                session.moveTo(
+                        navigator.continuationOf(
+                                session.dialogue()
+                                        .graph(),
+                                start.key()
+                        )
+                );
+
+                continue;
+            }
+
+            if (current instanceof DialogueReply reply) {
+
+                if (!navigator.isAvailable(
+                        session.context(),
+                        reply
+                )) {
+
+                    session.moveTo(
+                            navigator.continuationOf(
+                                    session.dialogue()
+                                            .graph(),
+                                    reply.key()
+                            )
+                    );
+
+                    continue;
+                }
+
+                presentReply(
+                        session,
+                        reply
+                );
+
+                return;
+            }
+
+            if (current instanceof DialogueBranch branch) {
+
+                List<DialogueChoice> available =
+                        navigator.availableChoices(
+                                session.dialogue()
+                                        .graph(),
+                                branch,
+                                session.context()
+                        );
+
+                if (available.isEmpty()) {
+
+                    failSession(
+                            session,
+                            "L'embranchement "
+                                    + branch.key()
+                                    + " ne possède aucun choix "
+                                    + "disponible dans le contexte courant."
+                    );
+
+                    return;
+                }
+
+                presentChoices(
+                        session,
+                        available
+                );
+
+                return;
+            }
+
+            if (current instanceof DialogueChoice choice) {
+
+                /*
+                 * Un Choice ne doit normalement jamais devenir
+                 * l'élément courant autrement qu'après sa sélection.
+                 *
+                 * choose(...) exécute immédiatement ses Actions
+                 * puis déplace la session vers sa continuation.
+                 */
+                failSession(
+                        session,
+                        "Le runtime a atteint directement le choix "
+                                + choice.key()
+                                + " sans sélection."
+                );
+
+                return;
+            }
+
+            if (current instanceof DialogueEnd) {
+
+                finishSession(
                         session
                 );
 
                 return;
             }
 
-            displayContinue(
+            failSession(
                     session,
-                    node
+                    "Type d'élément de dialogue non pris en charge : "
+                            + current.getClass()
+                            .getName()
             );
 
             return;
         }
-
-        /*
-         * CHOICE
-         */
-        if (!choiceTransitions.isEmpty()) {
-
-            displayChoices(
-                    session,
-                    node,
-                    choiceTransitions
-            );
-
-            return;
-        }
-
-        RpgLogger.error(
-                "Aucune transition exploitable depuis le node '"
-                        + session.getCurrentNodeKey()
-                        + "'."
-        );
-
-        endSession(
-                session
-        );
     }
 
     /**
-     * Présente un node attendant une progression simple.
+     * Présente une réplique et suspend
+     * le runtime jusqu'à CONTINUE.
      */
-    private void displayContinue(
+    private void presentReply(
             DialogueSession session,
-            DialogueNode node
+            DialogueReply reply
     ) {
-        DialogueView view =
-                new DialogueView(
-                        null,
-                        node.getText(),
-                        DialogueInteractionType.CONTINUE,
-                        List.of()
-                );
+
+        session.waitForContinue();
 
         presenter.show(
-                session.getContext()
+                session.context()
                         .getPlayer(),
-                view
-        );
-
-        RpgLogger.debug(
-                "Dialogue en attente de CONTINUE : "
-                        + session.getDialogueKey()
-                        + " | node="
-                        + node.getKey()
-        );
-    }
-
-    /**
-     * Présente une réplique Joueur simple portée
-     * par une transition AUTO.
-     */
-    private void displayAutoPlayerReply(
-            DialogueSession session,
-            DialogueTransition transition,
-            DialoguePlayerReply reply
-    ) {
-        DialogueView view =
                 new DialogueView(
-                        "Joueur",
-                        reply.getText(),
+                        speakerLabel(
+                                reply.speaker()
+                        ),
+                        reply.text(),
                         DialogueInteractionType.CONTINUE,
                         List.of()
-                );
-
-        presenter.show(
-                session.getContext()
-                        .getPlayer(),
-                view
-        );
-
-        session.beginAutoPlayerReply(
-                transition.getKey(),
-                reply.getPosition()
-        );
-
-        RpgLogger.debug(
-                "Réplique Joueur AUTO affichée : "
-                        + session.getDialogueKey()
-                        + " | transition="
-                        + transition.getKey()
-                        + " | position="
-                        + reply.getPosition()
+                )
         );
     }
 
     /**
-     * Présente les choix actuellement disponibles.
+     * Présente exactement les choix disponibles
+     * et suspend le runtime jusqu'à sélection.
      */
-    private void displayChoices(
+    private void presentChoices(
             DialogueSession session,
-            DialogueNode node,
-            List<DialogueTransition> choices
+            List<DialogueChoice> choices
     ) {
-        List<DialogueChoiceView> choiceViews =
+
+        List<DialogueElementKey> choiceKeys =
                 choices.stream()
-                        .map(choice ->
-                                new DialogueChoiceView(
-                                        choice.getPosition(),
-                                        choice.getLabel()
-                                )
+                        .map(
+                                DialogueChoice::key
                         )
                         .toList();
 
-        DialogueView view =
+        session.waitForChoice(
+                choiceKeys
+        );
+
+        List<DialogueChoiceView> views =
+                new ArrayList<>();
+
+        /*
+         * La position de la vue correspond à l'ordre
+         * réellement visible dans cette interaction.
+         *
+         * Exemple :
+         * positions métier disponibles 0, 3, 7
+         * deviennent positions d'affichage 0, 1, 2.
+         *
+         * L'identité reste portée par key.
+         */
+        for (int index = 0;
+             index < choices.size();
+             index++) {
+
+            DialogueChoice choice =
+                    choices.get(
+                            index
+                    );
+
+            views.add(
+                    new DialogueChoiceView(
+                            choice.key()
+                                    .value(),
+                            index,
+                            choice.text()
+                    )
+            );
+        }
+
+        presenter.show(
+                session.context()
+                        .getPlayer(),
                 new DialogueView(
                         null,
-                        node.isStructural()
-                                ? ""
-                                : node.getText(),
+                        null,
                         DialogueInteractionType.CHOICE,
-                        choiceViews
-                );
-
-        presenter.show(
-                session.getContext()
-                        .getPlayer(),
-                view
-        );
-
-        RpgLogger.debug(
-                choices.size()
-                        + " choix disponible(s) pour le dialogue '"
-                        + session.getDialogueKey()
-                        + "'."
+                        views
+                )
         );
     }
 
     /**
-     * Compatibilité temporaire avec l'ancien flux END.
-     *
-     * <p>Les transitions persistées depuis V12 utilisent
-     * désormais AUTO / CHOICE + terminal et ne passent
-     * normalement plus par cette présentation.
+     * Exécute séquentiellement les Actions
+     * appartenant à un élément.
      */
-    private void displayClose(
-            DialogueSession session,
-            DialogueNode node
+    private void executeActions(
+            TriggerContext context,
+            DialogueRules rules
     ) {
-        DialogueView view =
-                new DialogueView(
-                        null,
-                        node.getText(),
-                        DialogueInteractionType.CLOSE,
-                        List.of()
-                );
 
-        presenter.show(
-                session.getContext()
-                        .getPlayer(),
-                view
-        );
-
-        RpgLogger.debug(
-                "Dialogue en attente de FINISH : "
-                        + session.getDialogueKey()
-                        + " | node="
-                        + node.getKey()
-        );
-    }
-
-    /**
-     * Demande au moteur de suivre
-     * la transition AUTO disponible.
-     *
-     * @param playerUuid UUID du joueur
-     *
-     * @return true si la progression a été effectuée
-     */
-    public boolean advance(
-            UUID playerUuid
-    ) {
-        Optional<DialogueSession> sessionResult =
-                sessionManager.find(
-                        playerUuid
-                );
-
-        if (sessionResult.isEmpty()) {
-            return false;
-        }
-
-        DialogueSession session =
-                sessionResult.get();
-
-        Dialogue dialogue =
-                session.getDialogue();
-
-        /*
-         * Une réplique Joueur AUTO est actuellement affichée.
-         *
-         * On exécute d'abord les actions propres à cette réplique,
-         * puis on recherche la prochaine réplique disponible.
-         * Les conditions de la transition ne sont pas réévaluées entre
-         * les répliques : la transition exacte reste mémorisée.
-         */
-        if (session.isAutoPlayerReplyPhase()) {
-
-            String transitionKey =
-                    session.getPendingTransitionKey();
-
-            int replyPosition =
-                    session.getPendingPlayerReplyPosition();
-
-            Optional<DialogueTransition> pendingTransition =
-                    dialogue.findTransition(
-                            transitionKey
-                    );
-
-            if (pendingTransition.isEmpty()) {
-                RpgLogger.error(
-                        "Transition AUTO en attente introuvable : "
-                                + transitionKey
-                                + " | dialogue="
-                                + dialogue.getKey()
-                );
-
-                endSession(session);
-                return false;
-            }
-
-            DialogueTransition transition =
-                    pendingTransition.get();
-
-            if (transition.getType()
-                    != DialogueTransitionType.AUTO) {
-                RpgLogger.error(
-                        "La transition en attente n'est plus AUTO : "
-                                + transition.getKey()
-                );
-
-                endSession(session);
-                return false;
-            }
-
-            Optional<DialoguePlayerReply> currentReply =
-                    transition.getPlayerReplies()
-                            .stream()
-                            .filter(reply ->
-                                    reply.getPosition()
-                                            == replyPosition
-                            )
-                            .findFirst();
-
-            if (currentReply.isEmpty()) {
-                RpgLogger.error(
-                        "Réplique Joueur en attente introuvable : transition="
-                                + transition.getKey()
-                                + " | position="
-                                + replyPosition
-                );
-
-                endSession(session);
-                return false;
-            }
-
-            executePlayerReplyActions(
-                    session,
-                    currentReply.get()
-            );
-
-            Optional<DialoguePlayerReply> nextReply =
-                    navigator.findNextAvailablePlayerReply(
-                            transition,
-                            session,
-                            replyPosition
-                    );
-
-            if (nextReply.isPresent()) {
-                displayAutoPlayerReply(
-                        session,
-                        transition,
-                        nextReply.get()
-                );
-
-                return true;
-            }
-
-            session.clearPresentationPhase();
-
-            followTransition(
-                    dialogue,
-                    session,
-                    transition
-            );
-
-            return true;
-        }
-
-        List<DialogueTransition> availableTransitions =
-                navigator.getAvailableTransitions(
-                        dialogue,
-                        session
-                );
-
-        if (availableTransitions.size() != 1) {
-            return false;
-        }
-
-        DialogueTransition transition =
-                availableTransitions.get(0);
-
-        if (transition.getType()
-                != DialogueTransitionType.AUTO) {
-            return false;
-        }
-
-        Optional<DialoguePlayerReply> firstReply =
-                navigator.findNextAvailablePlayerReply(
-                        transition,
-                        session,
-                        0
-                );
-
-        if (firstReply.isPresent()) {
-            displayAutoPlayerReply(
-                    session,
-                    transition,
-                    firstReply.get()
-            );
-
-            return true;
-        }
-
-        RpgLogger.debug(
-                "Progression AUTO du dialogue : "
-                        + dialogue.getKey()
-                        + " | transition="
-                        + transition.getKey()
-                        + " | joueur="
-                        + session.getContext()
-                        .getPlayer()
-                        .getName()
-        );
-
-        followTransition(
-                dialogue,
-                session,
-                transition
-        );
-
-        return true;
-    }
-
-    /**
-     * Sélectionne un choix dans la session active
-     * d'un joueur.
-     *
-     * @param playerUuid UUID du joueur
-     * @param position position du choix
-     *
-     * @return true si le choix a été traité
-     */
-    public boolean choose(
-            UUID playerUuid,
-            int position
-    ) {
-        Optional<DialogueSession> sessionResult =
-                sessionManager.find(
-                        playerUuid
-                );
-
-        if (sessionResult.isEmpty()) {
-            return false;
-        }
-
-        DialogueSession session =
-                sessionResult.get();
-
-        Dialogue dialogue =
-                session.getDialogue();
-
-        List<DialogueTransition> availableTransitions =
-                navigator.getAvailableTransitions(
-                        dialogue,
-                        session
-                );
-
-        Optional<DialogueTransition> choiceResult =
-                availableTransitions.stream()
-                        .filter(transition ->
-                                transition.getType()
-                                        == DialogueTransitionType.CHOICE
-                        )
-                        .filter(transition ->
-                                transition.getPosition()
-                                        == position
-                        )
-                        .findFirst();
-
-        if (choiceResult.isEmpty()) {
-            return false;
-        }
-
-        DialogueTransition choice =
-                choiceResult.get();
-
-        RpgLogger.debug(
-                "Choix de dialogue sélectionné : "
-                        + dialogue.getKey()
-                        + " | transition="
-                        + choice.getKey()
-                        + " | joueur="
-                        + session.getContext()
-                        .getPlayer()
-                        .getName()
-        );
-
-        followTransition(
-                dialogue,
-                session,
-                choice
-        );
-
-        return true;
-    }
-
-    /**
-     * Compatibilité temporaire avec l'ancien protocole END.
-     *
-     * <p>Les nouvelles transitions terminales AUTO / CHOICE
-     * sont terminées directement dans followTransition().
-     *
-     * @param playerUuid UUID du joueur
-     *
-     * @return true si le dialogue a été terminé
-     */
-    public boolean finish(
-            UUID playerUuid
-    ) {
-        Optional<DialogueSession> sessionResult =
-                sessionManager.find(
-                        playerUuid
-                );
-
-        if (sessionResult.isEmpty()) {
-            return false;
-        }
-
-        DialogueSession session =
-                sessionResult.get();
-
-        Dialogue dialogue =
-                session.getDialogue();
-
-        List<DialogueTransition> availableTransitions =
-                navigator.getAvailableTransitions(
-                        dialogue,
-                        session
-                );
-
-        if (availableTransitions.size() != 1) {
-            return false;
-        }
-
-        DialogueTransition transition =
-                availableTransitions.get(0);
-
-        if (transition.getType()
-                != DialogueTransitionType.END) {
-
-            return false;
-        }
-
-        RpgLogger.debug(
-                "Fin de dialogue confirmée : "
-                        + dialogue.getKey()
-                        + " | joueur="
-                        + session.getContext()
-                        .getPlayer()
-                        .getName()
-        );
-
-        executeTransitionActions(
-                session,
-                transition
-        );
-
-        endSession(
-                session
-        );
-
-        return true;
-    }
-
-    private void followTransition(
-            Dialogue dialogue,
-            DialogueSession session,
-            DialogueTransition transition
-    ) {
-        executeTransitionActions(
-                session,
-                transition
-        );
-
-        /*
-         * Une transition terminale est une destination
-         * du dialogue, indépendamment de son type AUTO
-         * ou CHOICE.
-         *
-         * Les actions de transition sont exécutées avant
-         * la fermeture de la session.
-         */
-        if (transition.isTerminal()) {
-
-            RpgLogger.debug(
-                    "Transition terminale atteinte : "
-                            + dialogue.getKey()
-                            + " | transition="
-                            + transition.getKey()
-            );
-
-            endSession(
-                    session
-            );
-
-            return;
-        }
-
-        Optional<DialogueNode> nextNode =
-                navigator.getNextNode(
-                        dialogue,
-                        transition
-                );
-
-        if (nextNode.isEmpty()) {
-
-            RpgLogger.error(
-                    "Node cible introuvable pour une transition depuis '"
-                            + transition.getSourceNodeKey()
-                            + "'."
-            );
-
-            endSession(
-                    session
-            );
-
-            return;
-        }
-
-        session.setCurrentNodeKey(
-                nextNode.get()
-                        .getKey()
-        );
-
-        processCurrentNode(
-                dialogue,
-                session
-        );
-    }
-
-    private void executePlayerReplyActions(
-            DialogueSession session,
-            DialoguePlayerReply reply
-    ) {
-        for (Action action :
-                reply.getActions()) {
+        for (DialogueActionEntry entry :
+                rules.actions()) {
 
             actionManager.execute(
-                    session.getContext(),
-                    action
+                    context,
+                    entry.action()
             );
         }
     }
 
-    private void executeTransitionActions(
-            DialogueSession session,
-            DialogueTransition transition
-    ) {
-        for (Action action :
-                transition.getActions()) {
-
-            actionManager.execute(
-                    session.getContext(),
-                    action
-            );
-        }
-    }
-
-    private void endSession(
+    /**
+     * Termine normalement une session.
+     */
+    private void finishSession(
             DialogueSession session
     ) {
-        presenter.close(
-                session.getContext()
-                        .getPlayer()
-        );
+
+        UUID playerUuid =
+                session.playerUuid();
 
         sessionManager.remove(
-                session.getPlayerUuid()
+                playerUuid
         );
 
-        RpgLogger.debug(
-                "Dialogue terminé : "
-                        + session.getDialogueKey()
+        presenter.close(
+                session.context()
+                        .getPlayer()
         );
     }
 
     /**
-     * Vérifie si un joueur possède une session active.
+     * Termine une session après une incohérence
+     * runtime et journalise précisément la cause.
      */
-    public boolean hasSession(
-            UUID playerUuid
+    private void failSession(
+            DialogueSession session,
+            String reason
     ) {
-        return sessionManager.hasSession(
-                playerUuid
+
+        RpgLogger.error(
+                "Dialogue "
+                        + session.dialogue()
+                        .key()
+                        + " interrompu pour le joueur "
+                        + session.playerUuid()
+                        + " : "
+                        + reason
         );
+
+        finishSession(
+                session
+        );
+    }
+
+    /**
+     * Retourne l'élément courant.
+     */
+    private DialogueElement currentElement(
+            DialogueSession session
+    ) {
+
+        return session.dialogue()
+                .graph()
+                .require(
+                        session.currentElementKey()
+                );
+    }
+
+    /**
+     * Convertit le type métier du locuteur
+     * en libellé de présentation.
+     *
+     * <p>Aucune logique métier ne doit jamais
+     * être déduite de ce libellé.
+     */
+    private String speakerLabel(
+            DialogueReplySpeaker speaker
+    ) {
+
+        return switch (speaker) {
+            case NPC -> "PNJ";
+            case PLAYER -> "Joueur";
+        };
     }
 }

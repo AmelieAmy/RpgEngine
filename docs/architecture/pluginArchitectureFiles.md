@@ -26,13 +26,15 @@ src
                         ActionExecutor.java
                         ActionManager.java
                     bridge
-                        mapping
-                            DialogueEditorBridgeMapper.java
-                        DialogueEditorBridge.java
                         DialogueRuntimeBridge.java
                         NeoForgeBridge.java
+                        NeoForgeDialoguePresenter.java
                         QuestBridge.java
                     command
+                        dialogue
+                            CreateDialogueCommand.java
+                            OpenDialogueAdminCommand.java
+                            OpenDialogueEditorCommand.java
                         CommandManager.java
                         CommandResult.java
                         RpgCommand.java
@@ -64,73 +66,96 @@ src
                             V11_PlayerReplySequence.java
                             V12_TerminalDialogueTransitions.java
                             V13_StructuralDialogueNodes.java
+                            V14_NpcReplyRules.java
                         DatabaseManager.java
                         MigrationManager.java
                     dialogue
-                        command
-                            AddNodeDialogueCommand.java
-                            AddTransitionActionDialogueCommand.java
-                            AddTransitionConditionDialogueCommand.java
-                            AddTransitionDialogueCommand.java
-                            CreateDialogueCommand.java
-                            DeleteDialogueCommand.java
-                            InfoDialogueCommand.java
-                            ListDialogueCommand.java
-                            ListTransitionActionDialogueCommand.java
-                            ListTransitionConditionDialogueCommand.java
-                            OpenDialogueEditorCommand.java
-                            PreviewDialogueCommand.java
-                            RemoveTransitionActionDialogueCommand.java
-                            RemoveTransitionConditionDialogueCommand.java
-                            SetStartNodeDialogueCommand.java
-                            SetTransitionDialogueCommand.java
-                            UpdateNodeTextDialogueCommand.java
                         editor
-                            formatter
-                                DialogueEditorValueFormatter.java
+                            selection
+                                CreateDialogueNpcSelectionIntent.java
+                                DialogueAdminNpcSelectionListener.java
+                                DialogueAdminNpcSelectionService.java
+                                EditDialogueTriggerNpcSelectionIntent.java
+                                NpcSelection.java
+                                NpcSelectionCompletion.java
+                                NpcSelectionIntent.java
+                            transport
+                                DialogueAdminTransportEncoder.java
+                                DialogueEditorTransportEncoder.java
                             view
+                                DialogueAdminEntryView.java
+                                DialogueAdminTriggerView.java
+                                DialogueAdminView.java
+                                DialogueAdminViewMapper.java
                                 DialogueEditorActionView.java
+                                DialogueEditorBranchView.java
+                                DialogueEditorChoiceView.java
                                 DialogueEditorConditionView.java
-                                DialogueEditorGraphView.java
-                                DialogueEditorNodeView.java
-                                DialogueEditorPlayerReplyView.java
+                                DialogueEditorElementView.java
+                                DialogueEditorEndView.java
+                                DialogueEditorLinkView.java
                                 DialogueEditorQuestView.java
-                                DialogueEditorScenarioSummaryView.java
-                                DialogueEditorTransitionView.java
+                                DialogueEditorReplyView.java
+                                DialogueEditorStartView.java
                                 DialogueEditorTriggerView.java
                                 DialogueEditorView.java
-                            CreateDialogueBranchRequest.java
-                            CreateDialogueScenarioRequest.java
-                            DeleteDialogueElementRequest.java
-                            DialogueEditorService.java
-                            DialogueEditorViewMapper.java
-                            DialogueScenarioResolver.java
-                            DialogueScenarioService.java
-                            DialogueTriggerSelectionService.java
-                            InsertDialogueNpcReplyRequest.java
-                            SetDialogueTransitionTerminalRequest.java
-                            SwitchDialogueEditorStateRequest.java
-                        presentation
-                            DialogueChoiceView.java
-                            DialogueInteractionType.java
-                            DialoguePresenter.java
-                            DialogueView.java
-                            ModdedDialoguePresenter.java
-                            VanillaDialoguePresenter.java
+                                DialogueEditorViewMapper.java
+                            DialogueAdminService.java
+                            DialogueCreationService.java
+                            DialogueDeletionService.java
+                            DialogueEditorController.java
+                            DialogueNamingService.java
+                            DialogueTriggerPresentation.java
+                            DialogueTriggerPresentationService.java
+                        runtime
+                            view
+                                DialogueChoiceView.java
+                                DialogueInteractionType.java
+                                DialoguePresenter.java
+                                DialogueView.java
                         Dialogue.java
-                        DialogueInsertionKind.java
+                        DialogueActionEntry.java
+                        DialogueAlreadyExistsException.java
+                        DialogueBranch.java
+                        DialogueChoice.java
+                        DialogueConditionEntry.java
+                        DialogueContentService.java
+                        DialogueEditingService.java
+                        DialogueElement.java
+                        DialogueElementKey.java
+                        DialogueElementKeyGenerator.java
+                        DialogueEnd.java
+                        DialogueGraph.java
+                        DialogueGraphService.java
+                        DialogueInsertionPoint.java
+                        DialogueKey.java
+                        DialogueKeyGenerator.java
+                        DialogueLink.java
                         DialogueNavigator.java
-                        DialogueNode.java
-                        DialoguePlayerReply.java
-                        DialogueRepository.java
+                        DialogueNotFoundException.java
+                        DialoguePersistenceException.java
+                        DialogueReply.java
+                        DialogueReplySpeaker.java
+                        DialogueRules.java
+                        DialogueRuleKey.java
+                        DialogueRuleKeyGenerator.java
+                        DialogueRuleService.java
                         DialogueRunner.java
                         DialogueService.java
                         DialogueSession.java
                         DialogueSessionManager.java
-                        DialogueTransition.java
-                        DialogueTransitionType.java
+                        DialogueSessionPhase.java
+                        DialogueStart.java
                         DialogueValidationResult.java
                         DialogueValidator.java
+                        UuidDialogueElementKeyGenerator.java
+                        UuidDialogueKeyGenerator.java
+                        UuidDialogueRuleKeyGenerator.java
+                    infrastructure
+                        persistence 
+                            sqlite
+                                dialogue
+                                    SqliteDialogueRepository.java
                     listener
                         NPCListener.java
                     model
@@ -138,6 +163,10 @@ src
                         Condition.java
                         Trigger.java
                         TriggerType.java
+                    npc
+                        CitizensNpcService.java
+                        NpcService.java
+                        NpcSummary.java
                     quest
                         ftb
                             FtbQuestService.java

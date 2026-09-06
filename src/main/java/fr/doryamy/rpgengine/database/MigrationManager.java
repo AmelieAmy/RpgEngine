@@ -30,7 +30,8 @@ public final class MigrationManager {
                 new V10_AutoPlayerReply(),
                 new V11_PlayerReplySequence(),
                 new V12_TerminalDialogueTransitions(),
-                new V13_StructuralDialogueNodes()
+                new V13_StructuralDialogueNodes(),
+                new V14_DialogueGraphSystem()
         );
     }
 

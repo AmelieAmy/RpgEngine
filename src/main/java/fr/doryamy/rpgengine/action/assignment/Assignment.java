@@ -1,5 +1,7 @@
 package fr.doryamy.rpgengine.action.assignment;
 
+import java.util.Objects;
+
 /**
  * Représente une affectation interprétée par le moteur.
  *
@@ -32,8 +34,25 @@ public final class Assignment {
             AssignmentOperator operator,
             String value
     ) {
+        if (key == null || key.isBlank()) {
+            throw new IllegalArgumentException(
+                    "La clé d'une affectation ne peut pas être vide."
+            );
+        }
+
         this.key = key;
-        this.operator = operator;
+
+        this.operator = Objects.requireNonNull(
+                operator,
+                "L'opérateur d'une affectation ne peut pas être null."
+        );
+
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(
+                    "La valeur d'une affectation ne peut pas être vide."
+            );
+        }
+
         this.value = value;
     }
 
@@ -48,5 +67,4 @@ public final class Assignment {
     public String getValue() {
         return value;
     }
-
 }

@@ -1,14 +1,11 @@
 package fr.doryamy.rpgengine.bridge;
 
 import fr.doryamy.rpgengine.dialogue.DialogueRunner;
-import fr.doryamy.rpgengine.dialogue.editor.CreateDialogueScenarioRequest;
-import fr.doryamy.rpgengine.dialogue.editor.SwitchDialogueEditorStateRequest;
-import fr.doryamy.rpgengine.dialogue.editor.SetDialogueTransitionTerminalRequest;
-import fr.doryamy.rpgengine.dialogue.editor.CreateDialogueBranchRequest;
-import fr.doryamy.rpgengine.dialogue.editor.InsertDialogueNpcReplyRequest;
-import fr.doryamy.rpgengine.dialogue.editor.view.DialogueEditorScenarioSummaryView;
+import fr.doryamy.rpgengine.dialogue.editor.transport.DialogueAdminTransportEncoder;
+import fr.doryamy.rpgengine.dialogue.editor.transport.DialogueEditorTransportEncoder;
+import fr.doryamy.rpgengine.dialogue.editor.view.DialogueAdminView;
 import fr.doryamy.rpgengine.dialogue.editor.view.DialogueEditorView;
-import fr.doryamy.rpgengine.dialogue.presentation.DialogueView;
+import fr.doryamy.rpgengine.dialogue.runtime.view.DialogueView;
 import fr.doryamy.rpgengine.quest.QuestSummary;
 import fr.doryamy.rpgengine.util.RpgLogger;
 
@@ -16,9 +13,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 /**
- * Façade entre RPGEngine Plugin et le mod RPGEngine NeoForge.
+ * Façade entre RPGEngine Plugin
+ * et le mod RPGEngine NeoForge.
+ *
+ * <p>Cette façade ne contient aucune logique métier.
  */
 public final class NeoForgeBridge {
 
@@ -29,13 +30,18 @@ public final class NeoForgeBridge {
             new DialogueRuntimeBridge();
 
     private final DialogueEditorBridge dialogueEditorBridge =
-            new DialogueEditorBridge();
+            new DialogueEditorBridge(
+                    new DialogueEditorTransportEncoder(),
+                    new DialogueAdminTransportEncoder()
+            );
 
     private final QuestBridge questBridge =
             new QuestBridge();
 
     public boolean initialize() {
+
         try {
+
             Class<?> bridgeClass =
                     Class.forName(
                             BRIDGE_CLASS
@@ -87,241 +93,9 @@ public final class NeoForgeBridge {
     public void setDialogueRunner(
             DialogueRunner dialogueRunner
     ) {
+
         dialogueRuntimeBridge.setDialogueRunner(
                 dialogueRunner
-        );
-    }
-
-    public void setDialogueEditorRequestHandler(
-            BiConsumer<UUID, String> handler
-    ) {
-        dialogueEditorBridge.setDialogueEditorRequestHandler(
-                handler
-        );
-    }
-
-    public void setDialogueTriggerSelectionStartHandler(
-            BiConsumer<UUID, String> handler
-    ) {
-        dialogueEditorBridge.setDialogueTriggerSelectionStartHandler(
-                handler
-        );
-    }
-
-    public void setDialogueQuestListRequestHandler(
-            BiConsumer<UUID, String> handler
-    ) {
-        dialogueEditorBridge.setDialogueQuestListRequestHandler(
-                handler
-        );
-    }
-
-    public void setDialogueQuestSelectionHandler(
-            BiConsumer<UUID, Map<String, String>> handler
-    ) {
-        dialogueEditorBridge.setDialogueQuestSelectionHandler(
-                handler
-        );
-    }
-
-    public void setDialogueNodeTextUpdateHandler(
-            BiConsumer<UUID, Map<String, String>> handler
-    ) {
-        dialogueEditorBridge.setDialogueNodeTextUpdateHandler(
-                handler
-        );
-    }
-
-    public void setDialogueChoiceLabelUpdateHandler(
-            BiConsumer<UUID, Map<String, String>> handler
-    ) {
-        dialogueEditorBridge.setDialogueChoiceLabelUpdateHandler(
-                handler
-        );
-    }
-
-    public void setDialoguePlayerReplyAddHandler(
-            BiConsumer<UUID, Map<String, String>> handler
-    ) {
-        dialogueEditorBridge.setDialoguePlayerReplyAddHandler(
-                handler
-        );
-    }
-
-    public void setDialogueTransitionTerminalHandler(
-            BiConsumer<
-                    UUID,
-                    SetDialogueTransitionTerminalRequest
-                    > handler
-    ) {
-        dialogueEditorBridge.setDialogueTransitionTerminalHandler(
-                handler
-        );
-    }
-
-    public void setDialogueNpcReplyInsertHandler(
-            BiConsumer<
-                    UUID,
-                    InsertDialogueNpcReplyRequest
-                    > handler
-    ) {
-        dialogueEditorBridge.setDialogueNpcReplyInsertHandler(
-                handler
-        );
-    }
-
-    public void setDialogueBranchCreateHandler(
-            BiConsumer<
-                    UUID,
-                    CreateDialogueBranchRequest
-                    > handler
-    ) {
-        dialogueEditorBridge.setDialogueBranchCreateHandler(
-                handler
-        );
-    }
-
-    public void setDialogueElementDeleteHandler(
-            BiConsumer<UUID, Map<String, String>> handler
-    ) {
-        dialogueEditorBridge.setDialogueElementDeleteHandler(
-                handler
-        );
-    }
-
-
-    public void setDialogueActionEditorRequestHandler(
-            BiConsumer<UUID, Map<String, String>> handler
-    ) {
-        dialogueEditorBridge.setDialogueActionEditorRequestHandler(
-                handler
-        );
-    }
-
-    public void setDialogueActionUpdateHandler(
-            BiConsumer<UUID, Map<String, String>> handler
-    ) {
-        dialogueEditorBridge.setDialogueActionUpdateHandler(
-                handler
-        );
-    }
-
-    public void setDialogueConditionEditorRequestHandler(
-            BiConsumer<UUID, Map<String, String>> handler
-    ) {
-        dialogueEditorBridge.setDialogueConditionEditorRequestHandler(
-                handler
-        );
-    }
-
-    public void setDialogueConditionUpdateHandler(
-            BiConsumer<UUID, Map<String, String>> handler
-    ) {
-        dialogueEditorBridge.setDialogueConditionUpdateHandler(
-                handler
-        );
-    }
-
-    public boolean showDialogueQuestSelector(
-            UUID playerUuid,
-            String dialogueKey,
-            List<QuestSummary> quests
-    ) {
-        List<Map<String, String>> data =
-                quests.stream()
-                        .map(quest -> Map.of(
-                                "id", quest.id(),
-                                "name", quest.name(),
-                                "description", quest.description()
-                        ))
-                        .toList();
-
-        return dialogueEditorBridge.showDialogueQuestSelector(
-                playerUuid,
-                dialogueKey,
-                data
-        );
-    }
-
-    public boolean showDialogueConditionEditor(
-            UUID playerUuid,
-            String dialogueKey,
-            String transitionKey,
-            int conditionPosition,
-            String provider,
-            String expression,
-            List<QuestSummary> quests
-    ) {
-        List<Map<String, String>> data =
-                quests.stream()
-                        .map(quest -> Map.of(
-                                "id", quest.id(),
-                                "name", quest.name(),
-                                "description", quest.description()
-                        ))
-                        .toList();
-
-        return dialogueEditorBridge.showDialogueConditionEditor(
-                playerUuid,
-                dialogueKey,
-                transitionKey,
-                conditionPosition,
-                provider,
-                expression,
-                data
-        );
-    }
-
-    public boolean showDialogueActionEditor(
-            UUID playerUuid,
-            String dialogueKey,
-            String transitionKey,
-            int actionPosition,
-            String provider,
-            String expression,
-            List<QuestSummary> quests
-    ) {
-        List<Map<String, String>> data =
-                quests.stream()
-                        .map(quest -> Map.of(
-                                "id", quest.id(),
-                                "name", quest.name(),
-                                "description", quest.description()
-                        ))
-                        .toList();
-
-        return dialogueEditorBridge.showDialogueActionEditor(
-                playerUuid,
-                dialogueKey,
-                transitionKey,
-                actionPosition,
-                provider,
-                expression,
-                data
-        );
-    }
-
-    public void setDialogueEditorStateSwitchHandler(
-            BiConsumer<UUID, SwitchDialogueEditorStateRequest> handler
-    ) {
-        dialogueEditorBridge.setDialogueEditorStateSwitchHandler(
-                handler
-        );
-    }
-
-    public void setDialogueScenarioDeleteHandler(
-            BiConsumer<UUID, String> handler
-    ) {
-        dialogueEditorBridge.setDialogueScenarioDeleteHandler(
-                handler
-        );
-    }
-
-    public void setDialogueScenarioCreateHandler(
-            BiConsumer<UUID, CreateDialogueScenarioRequest> handler
-    ) {
-        dialogueEditorBridge.setDialogueScenarioCreateHandler(
-                handler
         );
     }
 
@@ -329,6 +103,7 @@ public final class NeoForgeBridge {
             UUID playerUuid,
             DialogueView view
     ) {
+
         return dialogueRuntimeBridge.showDialogue(
                 playerUuid,
                 view
@@ -338,28 +113,103 @@ public final class NeoForgeBridge {
     public boolean dismissDialogue(
             UUID playerUuid
     ) {
+
         return dialogueRuntimeBridge.dismissDialogue(
                 playerUuid
         );
     }
 
-    public boolean showDialogueManager(
-            UUID playerUuid,
-            List<DialogueEditorScenarioSummaryView> scenarios
+    public void setDialogueEditorRequestHandler(
+            BiConsumer<UUID, String> handler
     ) {
-        return dialogueEditorBridge.showDialogueManager(
-                playerUuid,
-                scenarios
+
+        dialogueEditorBridge.setDialogueEditorRequestHandler(
+                handler
         );
     }
 
-    public boolean showDialogueEditor(
+    public void setDialogueCreateRequestHandler(
+            BiConsumer<UUID, String> handler
+    ) {
+
+        dialogueEditorBridge.setDialogueCreateRequestHandler(
+                handler
+        );
+    }
+
+    public void setDialogueNpcSelectionRequestHandler(
+            Consumer<UUID> handler
+    ) {
+
+        dialogueEditorBridge.setDialogueNpcSelectionRequestHandler(
+                handler
+        );
+    }
+
+    public void setDialogueTriggerNpcSelectionRequestHandler(
+            BiConsumer<UUID, String> handler
+    ) {
+        dialogueEditorBridge.setDialogueTriggerNpcSelectionRequestHandler(
+                handler
+        );
+    }
+
+    public void setDialogueDeleteRequestHandler(
+            BiConsumer<UUID, String> handler
+    ) {
+        dialogueEditorBridge.setDialogueDeleteRequestHandler(
+                handler
+        );
+    }
+
+    public void setDialogueQuestRuleRequestHandler(
+            BiConsumer<UUID, Map<String, String>> handler
+    ) {
+        dialogueEditorBridge.setDialogueQuestRuleRequestHandler(handler);
+    }
+
+    public void setDialogueAdminRequestHandler(Consumer<UUID> handler) {
+        dialogueEditorBridge.setDialogueAdminRequestHandler(handler);
+    }
+
+    public void setDialogueRenameRequestHandler(
+            BiConsumer<UUID, Map<String, String>> handler
+    ) {
+        dialogueEditorBridge.setDialogueRenameRequestHandler(handler);
+    }
+
+    public boolean openDialogueAdmin(
+            UUID playerUuid,
+            DialogueAdminView view
+    ) {
+
+        return dialogueEditorBridge.openDialogueAdmin(
+                playerUuid,
+                view
+        );
+    }
+
+    public boolean openDialogueEditor(
             UUID playerUuid,
             DialogueEditorView view
     ) {
-        return dialogueEditorBridge.showDialogueEditor(
+
+        return dialogueEditorBridge.openDialogueEditor(
                 playerUuid,
                 view
+        );
+    }
+
+    public boolean showDialogueNpcSelectionResult(
+            UUID playerUuid,
+            String npcId,
+            String npcName
+    ) {
+
+        return dialogueEditorBridge.showDialogueNpcSelectionResult(
+                playerUuid,
+                npcId,
+                npcName
         );
     }
 
@@ -371,31 +221,38 @@ public final class NeoForgeBridge {
             UUID playerUuid,
             String questId
     ) {
-        return questBridge.getQuestState(
-                playerUuid,
-                questId
-        );
+        return questBridge.getQuestState(playerUuid, questId);
     }
 
     public boolean startQuest(
             UUID playerUuid,
             String questId
     ) {
-        return questBridge.startQuest(
-                playerUuid,
-                questId
-        );
+        return questBridge.startQuest(playerUuid, questId);
+    }
+
+    public boolean completeQuest(
+            UUID playerUuid,
+            String questId
+    ) {
+        return questBridge.completeQuest(playerUuid, questId);
+    }
+
+    public boolean reactivateQuest(
+            UUID playerUuid,
+            String questId
+    ) {
+        return questBridge.reactivateQuest(playerUuid, questId);
     }
 
     public String getQuestDisplayName(
             String questId
     ) {
-        return questBridge.getQuestDisplayName(
-                questId
-        );
+        return questBridge.getQuestDisplayName(questId);
     }
 
     public void shutdown() {
+
         dialogueRuntimeBridge.shutdown();
         dialogueEditorBridge.shutdown();
         questBridge.shutdown();
@@ -406,6 +263,7 @@ public final class NeoForgeBridge {
     }
 
     private void shutdownAfterInitializationFailure() {
+
         dialogueRuntimeBridge.shutdown();
         dialogueEditorBridge.shutdown();
         questBridge.shutdown();

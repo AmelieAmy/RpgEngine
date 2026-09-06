@@ -1,13 +1,18 @@
 package fr.doryamy.rpgengine.dialogue;
 
 import fr.doryamy.rpgengine.condition.ConditionManager;
+import fr.doryamy.rpgengine.model.Condition;
+import fr.doryamy.rpgengine.trigger.TriggerContext;
 
-import java.util.Comparator;
 import java.util.List;
-import java.util.Optional;
+import java.util.Objects;
 
 /**
- * Gère la navigation à l'intérieur d'un graphe de dialogue.
+ * Fournit les opérations de navigation et de sélection
+ * nécessaires à l'exécution d'un dialogue.
+ *
+ * <p>Le Navigator ne modifie jamais le graphe,
+ * n'exécute aucune Action et ne gère aucune session.
  */
 public final class DialogueNavigator {
 
@@ -16,85 +21,187 @@ public final class DialogueNavigator {
     public DialogueNavigator(
             ConditionManager conditionManager
     ) {
-        this.conditionManager = conditionManager;
+
+        this.conditionManager =
+                Objects.requireNonNull(
+                        conditionManager,
+                        "conditionManager"
+                );
     }
 
     /**
-     * Retourne les transitions disponibles depuis le node courant.
+     * Indique si une réplique est disponible
+     * dans le contexte courant.
      */
-    public List<DialogueTransition> getAvailableTransitions(
-            Dialogue dialogue,
-            DialogueSession session
+    public boolean isAvailable(
+            TriggerContext context,
+            DialogueReply reply
     ) {
-        return dialogue.getTransitionsFrom(
-                        session.getCurrentNodeKey()
+
+        Objects.requireNonNull(
+                context,
+                "context"
+        );
+
+        Objects.requireNonNull(
+                reply,
+                "reply"
+        );
+
+        return checkRules(
+                context,
+                reply.rules()
+        );
+    }
+
+    /**
+     * Indique si un choix est disponible
+     * dans le contexte courant.
+     */
+    public boolean isAvailable(
+            TriggerContext context,
+            DialogueChoice choice
+    ) {
+
+        Objects.requireNonNull(
+                context,
+                "context"
+        );
+
+        Objects.requireNonNull(
+                choice,
+                "choice"
+        );
+
+        return checkRules(
+                context,
+                choice.rules()
+        );
+    }
+
+    /**
+     * Retourne les choix actuellement disponibles
+     * pour un embranchement.
+     *
+     * <p>L'ordre retourné correspond à l'ordre métier
+     * défini par DialogueChoice.position().
+     */
+    public List<DialogueChoice> availableChoices(
+            DialogueGraph graph,
+            DialogueBranch branch,
+            TriggerContext context
+    ) {
+
+        Objects.requireNonNull(
+                graph,
+                "graph"
+        );
+
+        Objects.requireNonNull(
+                branch,
+                "branch"
+        );
+
+        Objects.requireNonNull(
+                context,
+                "context"
+        );
+
+        graph.require(
+                branch.key()
+        );
+
+        return graph.choicesOf(
+                        branch.key()
                 )
                 .stream()
-                .filter(transition ->
-                        conditionManager.check(
-                                session.getContext(),
-                                transition.getConditions()
+                .filter(choice ->
+                        isAvailable(
+                                context,
+                                choice
                         )
                 )
                 .toList();
     }
 
     /**
-     * Retourne les répliques Joueur dont toutes les conditions sont vraies.
+     * Retourne l'unique continuation structurelle
+     * d'un Start, d'une Reply ou d'un Choice.
+     *
+     * <p>Le graphe doit avoir été validé avant
+     * son exécution.
      */
-    public List<DialoguePlayerReply> getAvailablePlayerReplies(
-            DialogueTransition transition,
-            DialogueSession session
+    public DialogueElementKey continuationOf(
+            DialogueGraph graph,
+            DialogueElementKey sourceKey
     ) {
-        return transition.getPlayerReplies()
-                .stream()
-                .filter(reply ->
-                        conditionManager.check(
-                                session.getContext(),
-                                reply.getConditions()
-                        )
-                )
-                .sorted(
-                        Comparator.comparingInt(
-                                DialoguePlayerReply::getPosition
-                        )
-                )
-                .toList();
-    }
 
-    /**
-     * Recherche la prochaine réplique Joueur disponible après une position.
-     */
-    public Optional<DialoguePlayerReply> findNextAvailablePlayerReply(
-            DialogueTransition transition,
-            DialogueSession session,
-            int afterPosition
-    ) {
-        return getAvailablePlayerReplies(
-                transition,
-                session
-        )
-                .stream()
-                .filter(reply ->
-                        reply.getPosition() > afterPosition
-                )
-                .findFirst();
-    }
+        Objects.requireNonNull(
+                graph,
+                "graph"
+        );
 
-    /**
-     * Recherche le node cible d'une transition.
-     */
-    public Optional<DialogueNode> getNextNode(
-            Dialogue dialogue,
-            DialogueTransition transition
-    ) {
-        if (transition.getType()
-                == DialogueTransitionType.END) {
-            return Optional.empty();
+        Objects.requireNonNull(
+                sourceKey,
+                "sourceKey"
+        );
+
+        DialogueElement source =
+                graph.require(
+                        sourceKey
+                );
+
+        if (!(source instanceof DialogueStart)
+                && !(source instanceof DialogueReply)
+                && !(source instanceof DialogueChoice)) {
+
+            throw new IllegalArgumentException(
+                    "L'élément "
+                            + sourceKey
+                            + " ne possède pas de continuation unique."
+            );
         }
 
-        return dialogue.findNode(
-                transition.getTargetNodeKey()
+        List<DialogueLink> outgoing =
+                graph.outgoingLinks(
+                        sourceKey
+                );
+
+        if (outgoing.size() != 1) {
+            throw new IllegalStateException(
+                    "L'élément "
+                            + sourceKey
+                            + " devrait posséder exactement "
+                            + "une continuation. Trouvées : "
+                            + outgoing.size()
+                            + "."
+            );
+        }
+
+        return outgoing.getFirst()
+                .target();
+    }
+
+    /**
+     * Évalue les Conditions appartenant
+     * à un élément de dialogue.
+     */
+    private boolean checkRules(
+            TriggerContext context,
+            DialogueRules rules
+    ) {
+
+        List<Condition> conditions =
+                rules.conditions()
+                        .stream()
+                        .map(
+                                DialogueConditionEntry::condition
+                        )
+                        .toList();
+
+        return conditionManager.check(
+                context,
+                conditions
         );
     }
 }

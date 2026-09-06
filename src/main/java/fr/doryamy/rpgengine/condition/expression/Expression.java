@@ -1,5 +1,7 @@
 package fr.doryamy.rpgengine.condition.expression;
 
+import java.util.Objects;
+
 /**
  * Représente une expression de comparaison interprétée par le moteur.
  *
@@ -38,8 +40,25 @@ public final class Expression {
             ComparisonOperator operator,
             String value
     ) {
+        if (key == null || key.isBlank()) {
+            throw new IllegalArgumentException(
+                    "La clé d'une expression ne peut pas être vide."
+            );
+        }
+
         this.key = key;
-        this.operator = operator;
+
+        this.operator = Objects.requireNonNull(
+                operator,
+                "L'opérateur d'une expression ne peut pas être null."
+        );
+
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(
+                    "La valeur d'une expression ne peut pas être vide."
+            );
+        }
+
         this.value = value;
     }
 

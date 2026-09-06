@@ -3,33 +3,57 @@ package fr.doryamy.rpgengine.dialogue;
 import java.util.List;
 
 /**
- * Représente le résultat de la validation
- * structurelle d'un dialogue.
+ * Résultat de validation d'un dialogue.
  *
- * Un résultat contient :
- * - un indicateur de validité ;
- * - la liste des erreurs détectées.
- *
- * Cette classe est immuable.
+ * <p>La validité est entièrement déterminée
+ * par l'absence d'erreurs.
  */
-public final class DialogueValidationResult {
+public record DialogueValidationResult(
+        List<String> errors
+) {
 
-    private final boolean valid;
-    private final List<String> errors;
+    public DialogueValidationResult {
 
-    public DialogueValidationResult(
-            boolean valid,
+        errors =
+                errors == null
+                        ? List.of()
+                        : List.copyOf(errors);
+    }
+
+    /**
+     * Retourne un résultat valide.
+     */
+    public static DialogueValidationResult valid() {
+
+        return new DialogueValidationResult(
+                List.of()
+        );
+    }
+
+    /**
+     * Retourne un résultat invalide.
+     */
+    public static DialogueValidationResult invalid(
             List<String> errors
     ) {
-        this.valid = valid;
-        this.errors = List.copyOf(errors);
+
+        if (errors == null || errors.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Un résultat invalide doit contenir "
+                            + "au moins une erreur."
+            );
+        }
+
+        return new DialogueValidationResult(
+                errors
+        );
     }
 
+    /**
+     * Indique si le dialogue est valide.
+     */
     public boolean isValid() {
-        return valid;
-    }
 
-    public List<String> getErrors() {
-        return errors;
+        return errors.isEmpty();
     }
 }

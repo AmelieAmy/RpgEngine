@@ -2,21 +2,11 @@ package fr.doryamy.rpgengine.dialogue;
 
 import fr.doryamy.rpgengine.trigger.TriggerContext;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 
 /**
- * Gère le cycle de vie des sessions de dialogue actives.
- *
- * Cette classe est responsable :
- *   de créer une session ;
- *   de rechercher une session ;
- *   de supprimer une session ;
- *   de vérifier l'existence d'une session.
- *
- * Elle ne contient aucune logique d'exécution ou de navigation.
+ * Registre des sessions de dialogue actuellement
+ * actives.
  */
 public final class DialogueSessionManager {
 
@@ -24,28 +14,51 @@ public final class DialogueSessionManager {
             new HashMap<>();
 
     /**
-     * Crée ou remplace la session active d'un joueur.
+     * Crée et enregistre une nouvelle session.
      *
-     * @param dialogue dialogue démarré
-     * @param context contexte d'exécution
-     *
-     * @return session créée
+     * <p>Un joueur ne peut avoir qu'un dialogue
+     * actif à la fois.
      */
     public DialogueSession create(
             Dialogue dialogue,
             TriggerContext context
     ) {
+
+        Objects.requireNonNull(
+                dialogue,
+                "dialogue"
+        );
+
+        Objects.requireNonNull(
+                context,
+                "context"
+        );
+
+        UUID playerUuid =
+                context.getPlayer()
+                        .getUniqueId();
+
+        if (sessions.containsKey(
+                playerUuid
+        )) {
+
+            throw new IllegalStateException(
+                    "Le joueur "
+                            + playerUuid
+                            + " possède déjà une session "
+                            + "de dialogue active."
+            );
+        }
+
         DialogueSession session =
                 new DialogueSession(
-                        context.getPlayer()
-                                .getUniqueId(),
+                        playerUuid,
                         dialogue,
-                        dialogue.getStartNodeKey(),
                         context
                 );
 
         sessions.put(
-                session.getPlayerUuid(),
+                playerUuid,
                 session
         );
 
@@ -54,13 +67,16 @@ public final class DialogueSessionManager {
 
     /**
      * Recherche la session active d'un joueur.
-     *
-     * @param playerUuid UUID du joueur
-     * @return session si elle existe
      */
     public Optional<DialogueSession> find(
             UUID playerUuid
     ) {
+
+        Objects.requireNonNull(
+                playerUuid,
+                "playerUuid"
+        );
+
         return Optional.ofNullable(
                 sessions.get(
                         playerUuid
@@ -69,28 +85,38 @@ public final class DialogueSessionManager {
     }
 
     /**
-     * Vérifie si un joueur possède une session active.
-     *
-     * @param playerUuid UUID du joueur
-     * @return true si une session existe
+     * Retourne la session active ou échoue.
      */
-    public boolean hasSession(
+    public DialogueSession require(
             UUID playerUuid
     ) {
-        return sessions.containsKey(
+
+        return find(
                 playerUuid
+        ).orElseThrow(() ->
+                new IllegalStateException(
+                        "Aucune session de dialogue active "
+                                + "pour le joueur "
+                                + playerUuid
+                                + "."
+                )
         );
     }
 
     /**
-     * Supprime la session active d'un joueur.
+     * Termine et retire la session d'un joueur.
      *
-     * @param playerUuid UUID du joueur
-     * @return session supprimée si elle existait
+     * @return session qui était active
      */
     public Optional<DialogueSession> remove(
             UUID playerUuid
     ) {
+
+        Objects.requireNonNull(
+                playerUuid,
+                "playerUuid"
+        );
+
         return Optional.ofNullable(
                 sessions.remove(
                         playerUuid
@@ -99,9 +125,28 @@ public final class DialogueSessionManager {
     }
 
     /**
-     * Supprime toutes les sessions actives.
+     * Indique si le joueur possède actuellement
+     * une session.
+     */
+    public boolean hasActiveSession(
+            UUID playerUuid
+    ) {
+
+        Objects.requireNonNull(
+                playerUuid,
+                "playerUuid"
+        );
+
+        return sessions.containsKey(
+                playerUuid
+        );
+    }
+
+    /**
+     * Supprime toutes les sessions.
      *
-     * Utile notamment lors de l'arrêt du moteur.
+     * <p>Principalement destiné à l'arrêt
+     * du moteur/plugin.
      */
     public void clear() {
         sessions.clear();

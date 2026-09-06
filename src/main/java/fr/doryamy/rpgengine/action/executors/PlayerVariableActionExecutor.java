@@ -8,38 +8,55 @@ import fr.doryamy.rpgengine.model.Action;
 import fr.doryamy.rpgengine.repository.PlayerVariableRepository;
 import fr.doryamy.rpgengine.trigger.TriggerContext;
 import fr.doryamy.rpgengine.util.RpgLogger;
-import org.bukkit.entity.Player;
+
+import java.util.Objects;
+import java.util.UUID;
 
 /**
  * Executor responsable de la modification
  * des variables d'un joueur.
- * <p>
+ *
  * Cette classe interprète une expression
  * d'affectation, calcule la nouvelle valeur,
  * puis la sauvegarde dans le dépôt des
  * variables joueur.
- * <p>
+ *
  * Cette action correspond au provider
  * "PLAYER".
  */
-public final class PlayerVariableActionExecutor implements ActionExecutor {
+public final class PlayerVariableActionExecutor
+        implements ActionExecutor {
 
     private final PlayerVariableRepository repository;
     private final AssignmentParser parser;
     private final AssignmentExecutor executor;
 
     /**
-     * Construit un executor utilisant
-     * le dépôt des variables joueur.
+     * Construit l'executor des variables joueur.
      *
-     * @param repository dépôt des variables
+     * @param repository dépôt des variables joueur
+     * @param parser analyseur des affectations
+     * @param executor moteur d'exécution des affectations
      */
     public PlayerVariableActionExecutor(
-            PlayerVariableRepository repository
+            PlayerVariableRepository repository,
+            AssignmentParser parser,
+            AssignmentExecutor executor
     ) {
-        this.repository = repository;
-        this.parser = new AssignmentParser();
-        this.executor = new AssignmentExecutor();
+        this.repository = Objects.requireNonNull(
+                repository,
+                "PlayerVariableRepository ne peut pas être null."
+        );
+
+        this.parser = Objects.requireNonNull(
+                parser,
+                "AssignmentParser ne peut pas être null."
+        );
+
+        this.executor = Objects.requireNonNull(
+                executor,
+                "AssignmentExecutor ne peut pas être null."
+        );
     }
 
     @Override
@@ -50,50 +67,80 @@ public final class PlayerVariableActionExecutor implements ActionExecutor {
     /**
      * Exécute une modification d'une variable
      * du joueur.
-     * <p>
+     *
      * Le traitement se déroule en plusieurs étapes :
-     * <p>
+     *
      * 1. analyse de l'expression ;
      * 2. lecture de la valeur actuelle ;
      * 3. calcul de la nouvelle valeur ;
      * 4. sauvegarde de la nouvelle valeur.
      *
      * @param context contexte d'exécution
-     * @param action  action à appliquer
+     * @param action action à appliquer
      */
     @Override
     public void execute(
             TriggerContext context,
             Action action
     ) {
+        Objects.requireNonNull(
+                context,
+                "TriggerContext ne peut pas être null."
+        );
+
+        Objects.requireNonNull(
+                action,
+                "Action ne peut pas être null."
+        );
+
         Assignment assignment;
-        Player player = context.getPlayer();
-        String playerUuid = player.getUniqueId().toString();
 
         try {
-            assignment = parser.parse(action.getExpression());
+            assignment =
+                    parser.parse(
+                            action.getExpression()
+                    );
+
         } catch (IllegalArgumentException e) {
+
             RpgLogger.error(
                     "Action PLAYER invalide : "
                             + action.getExpression()
                             + " | "
                             + e.getMessage()
             );
+
             return;
         }
 
-        String currentValue = repository.get(playerUuid, assignment.getKey());
+        UUID playerUuid =
+                context.getPlayer()
+                        .getUniqueId();
+
+        String currentValue =
+                repository.get(
+                        playerUuid,
+                        assignment.getKey()
+                );
+
         String newValue;
 
         try {
-            newValue = executor.execute(currentValue, assignment);
+            newValue =
+                    executor.execute(
+                            currentValue,
+                            assignment
+                    );
+
         } catch (IllegalArgumentException e) {
+
             RpgLogger.error(
                     "Impossible d'exécuter l'action PLAYER : "
                             + action.getExpression()
                             + " | "
                             + e.getMessage()
             );
+
             return;
         }
 

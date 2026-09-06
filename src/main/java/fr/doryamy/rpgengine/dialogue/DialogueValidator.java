@@ -3,693 +3,567 @@ package fr.doryamy.rpgengine.dialogue;
 import java.util.*;
 
 /**
- * Vérifie la cohérence structurelle
+ * Valide les invariants métier complets
  * d'un graphe de dialogue.
  *
- * Cette classe ne modifie jamais le dialogue
- * et ne tente jamais de corriger automatiquement
- * une structure invalide.
- *
- * Toute ambiguïté est retournée comme
- * une erreur de validation.
+ * <p>DialogueGraph garantit l'intégrité structurelle
+ * élémentaire. Ce validator garantit que cette structure
+ * constitue réellement un dialogue exécutable
+ * sans ambiguïté.
  */
 public final class DialogueValidator {
 
     /**
-     * Valide la structure complète d'un dialogue.
+     * Valide un dialogue complet.
      *
-     * @param dialogue dialogue à vérifier
+     * @param dialogue dialogue à valider
      * @return résultat de validation
      */
     public DialogueValidationResult validate(
             Dialogue dialogue
     ) {
+
+        if (dialogue == null) {
+            return DialogueValidationResult.invalid(
+                    List.of(
+                            "Le dialogue ne peut pas être null."
+                    )
+            );
+        }
+
+        return validate(
+                dialogue.graph()
+        );
+    }
+
+    public DialogueValidationResult validate(
+            DialogueGraph graph
+    ) {
+
+        if (graph == null) {
+            return DialogueValidationResult.invalid(
+                    List.of(
+                            "Le graphe ne peut pas être null."
+                    )
+            );
+        }
+
         List<String> errors =
                 new ArrayList<>();
 
-        validateStartNode(
-                dialogue,
+        validateStart(
+                graph,
                 errors
         );
 
-        validateNodeKeys(
-                dialogue,
+        validateReplies(
+                graph,
                 errors
         );
 
-        validateTransitionKeys(
-                dialogue,
+        validateBranches(
+                graph,
                 errors
         );
 
-        validateTransitionPositions(
-                dialogue,
+        validateChoices(
+                graph,
                 errors
         );
 
-        validateTransitions(
-                dialogue,
+        validateContinuationTargets(
+                graph,
                 errors
         );
 
-        validatePlayerReplies(
-                dialogue,
-                errors
-        );
-
-        validateTerminalTransitions(
-                dialogue,
+        validateEnds(
+                graph,
                 errors
         );
 
         validateReachability(
-                dialogue,
+                graph,
                 errors
         );
 
-        validateAutoLoops(
-                dialogue,
+        validateEndReachability(
+                graph,
                 errors
         );
 
-        return new DialogueValidationResult(
-                errors.isEmpty(),
+        if (errors.isEmpty()) {
+            return DialogueValidationResult.valid();
+        }
+
+        return DialogueValidationResult.invalid(
                 errors
         );
     }
 
     /**
-     * Vérifie que le dialogue possède
-     * un node de départ existant.
+     * Valide l'élément Start.
      */
-    private void validateStartNode(
-            Dialogue dialogue,
+    private void validateStart(
+            DialogueGraph graph,
             List<String> errors
     ) {
-        String startNodeKey =
-                dialogue.getStartNodeKey();
 
-        if (startNodeKey == null
-                || startNodeKey.isBlank()) {
+        DialogueStart start =
+                graph.start();
 
+        int incoming =
+                graph.incomingLinks(
+                        start.key()
+                ).size();
+
+        int outgoing =
+                graph.outgoingLinks(
+                        start.key()
+                ).size();
+
+        if (incoming != 0) {
             errors.add(
-                    "Le dialogue ne possède aucun node de départ."
+                    "Le Start "
+                            + start.key()
+                            + " ne doit posséder aucun lien entrant."
             );
-
-            return;
         }
 
-        if (!containsNode(
-                dialogue,
-                startNodeKey
-        )) {
+        if (outgoing != 1) {
             errors.add(
-                    "Le node de départ '"
-                            + startNodeKey
-                            + "' n'existe pas."
+                    "Le Start "
+                            + start.key()
+                            + " doit posséder exactement "
+                            + "un lien sortant. Trouvés : "
+                            + outgoing
+                            + "."
             );
         }
     }
 
     /**
-     * Vérifie que les clés des nodes
-     * sont définies et uniques.
+     * Valide toutes les répliques.
      */
-    private void validateNodeKeys(
-            Dialogue dialogue,
+    private void validateReplies(
+            DialogueGraph graph,
             List<String> errors
     ) {
-        Set<String> keys =
-                new HashSet<>();
 
-        for (DialogueNode node :
-                dialogue.getNodes()) {
+        for (DialogueElement element :
+                graph.elements().values()) {
 
-            String key =
-                    node.getKey();
-
-            if (key.isBlank()) {
-                errors.add(
-                        "Un node possède une clé vide."
-                );
-
+            if (!(element instanceof DialogueReply reply)) {
                 continue;
             }
 
-            if (!keys.add(key)) {
+            int outgoing =
+                    graph.outgoingLinks(
+                            reply.key()
+                    ).size();
+
+            if (outgoing != 1) {
                 errors.add(
-                        "Clé de node dupliquée : "
-                                + key
+                        "La réplique "
+                                + reply.key()
+                                + " doit posséder exactement "
+                                + "un lien sortant. Trouvés : "
+                                + outgoing
+                                + "."
                 );
             }
         }
     }
 
     /**
-     * Vérifie que les clés des transitions
-     * sont définies et uniques.
+     * Valide tous les embranchements.
      */
-    private void validateTransitionKeys(
-            Dialogue dialogue,
+    private void validateBranches(
+            DialogueGraph graph,
             List<String> errors
     ) {
-        Set<String> keys =
-                new HashSet<>();
 
-        for (DialogueTransition transition :
-                dialogue.getTransitions()) {
+        for (DialogueElement element :
+                graph.elements().values()) {
 
-            String key =
-                    transition.getKey();
-
-            if (key.isBlank()) {
-                errors.add(
-                        "Une transition possède une clé vide."
-                );
-
+            if (!(element instanceof DialogueBranch branch)) {
                 continue;
             }
 
-            if (!keys.add(key)) {
+            List<DialogueLink> outgoing =
+                    graph.outgoingLinks(
+                            branch.key()
+                    );
+
+            if (outgoing.size() < 2) {
                 errors.add(
-                        "Clé de transition dupliquée : "
-                                + key
+                        "L'embranchement "
+                                + branch.key()
+                                + " doit posséder au moins "
+                                + "deux choix. Trouvés : "
+                                + outgoing.size()
+                                + "."
                 );
             }
-        }
-    }
-
-    /**
-     * Vérifie que deux transitions issues
-     * du même node ne partagent pas
-     * la même position.
-     */
-    private void validateTransitionPositions(
-            Dialogue dialogue,
-            List<String> errors
-    ) {
-        Map<String, Set<Integer>> positionsBySource =
-                new HashMap<>();
-
-        for (DialogueTransition transition :
-                dialogue.getTransitions()) {
-
-            String source =
-                    transition.getSourceNodeKey();
 
             Set<Integer> positions =
-                    positionsBySource.computeIfAbsent(
-                            source,
-                            ignored -> new HashSet<>()
+                    new HashSet<>();
+
+            for (DialogueLink link : outgoing) {
+
+                DialogueElement target =
+                        graph.require(
+                                link.target()
+                        );
+
+                if (!(target instanceof DialogueChoice choice)) {
+
+                    errors.add(
+                            "L'embranchement "
+                                    + branch.key()
+                                    + " cible un élément qui "
+                                    + "n'est pas un choix : "
+                                    + target.key()
+                                    + "."
                     );
 
-            if (!positions.add(
-                    transition.getPosition()
-            )) {
-                errors.add(
-                        "Position de transition dupliquée depuis le node '"
-                                + source
-                                + "' : "
-                                + transition.getPosition()
-                );
+                    continue;
+                }
+
+                if (!positions.add(
+                        choice.position()
+                )) {
+
+                    errors.add(
+                            "L'embranchement "
+                                    + branch.key()
+                                    + " contient plusieurs choix "
+                                    + "à la position "
+                                    + choice.position()
+                                    + "."
+                    );
+                }
             }
         }
     }
 
     /**
-     * Vérifie la cohérence locale
-     * de chaque transition.
+     * Valide tous les choix.
      */
-    private void validateTransitions(
-            Dialogue dialogue,
+    private void validateChoices(
+            DialogueGraph graph,
             List<String> errors
     ) {
-        Map<String, Integer> transitionCount =
-                new HashMap<>();
 
-        for (DialogueTransition transition :
-                dialogue.getTransitions()) {
+        for (DialogueElement element :
+                graph.elements().values()) {
 
-            String source =
-                    transition.getSourceNodeKey();
-
-            String target =
-                    transition.getTargetNodeKey();
-
-            /*
-             * Node source.
-             */
-            if (!containsNode(
-                    dialogue,
-                    source
-            )) {
-                errors.add(
-                        "La transition référence un node source inexistant : "
-                                + source
-                );
+            if (!(element instanceof DialogueChoice choice)) {
+                continue;
             }
 
-            /*
-             * Destination.
-             *
-             * La nature de la transition (AUTO / CHOICE)
-             * est indépendante du fait qu'elle termine
-             * ou non le dialogue.
-             */
-            if (transition.isTerminal()) {
-
-                if (target != null) {
-                    errors.add(
-                            "Une transition terminale depuis '"
-                                    + source
-                                    + "' ne doit pas posséder de cible."
+            List<DialogueLink> incoming =
+                    graph.incomingLinks(
+                            choice.key()
                     );
-                }
+
+            List<DialogueLink> outgoing =
+                    graph.outgoingLinks(
+                            choice.key()
+                    );
+
+            if (incoming.size() != 1) {
+
+                errors.add(
+                        "Le choix "
+                                + choice.key()
+                                + " doit posséder exactement "
+                                + "un lien entrant. Trouvés : "
+                                + incoming.size()
+                                + "."
+                );
 
             } else {
 
-                if (target == null
-                        || target.isBlank()) {
+                DialogueElement source =
+                        graph.require(
+                                incoming.getFirst()
+                                        .source()
+                        );
 
+                if (!(source instanceof DialogueBranch)) {
                     errors.add(
-                            "La transition "
-                                    + transition.getType()
-                                    + " depuis '"
-                                    + source
-                                    + "' ne possède aucune cible."
-                    );
-
-                } else if (!containsNode(
-                        dialogue,
-                        target
-                )) {
-
-                    errors.add(
-                            "La transition depuis '"
-                                    + source
-                                    + "' référence un node cible inexistant : "
-                                    + target
+                            "Le choix "
+                                    + choice.key()
+                                    + " doit appartenir à un "
+                                    + "embranchement, mais son "
+                                    + "parent est "
+                                    + source.key()
+                                    + "."
                     );
                 }
             }
 
-            /*
-             * Validation selon le type.
-             */
-            switch (transition.getType()) {
-
-                case AUTO -> {
-
-                    if (transition.getLabel() != null) {
-                        errors.add(
-                                "Une transition AUTO ne doit pas posséder de label."
-                        );
-                    }
-                }
-
-                case CHOICE -> {
-
-                    String label =
-                            transition.getLabel();
-
-                    if (label == null
-                            || label.isBlank()) {
-
-                        errors.add(
-                                "Une transition CHOICE doit posséder un label."
-                        );
-                    }
-
-                    if (!transition.getPlayerReplies().isEmpty()) {
-                        errors.add(
-                                "Une transition CHOICE ne doit pas posséder de répliques Joueur séquentielles."
-                        );
-                    }
-                }
-
-                /*
-                 * Compatibilité temporaire avec les anciens
-                 * objets encore susceptibles d'utiliser END.
-                 *
-                 * Après la migration V12, les transitions
-                 * persistées END sont devenues AUTO terminales.
-                 */
-                case END -> {
-
-                    if (!transition.isTerminal()) {
-                        errors.add(
-                                "Une ancienne transition END doit être terminale."
-                        );
-                    }
-
-                    if (transition.getLabel() != null) {
-                        errors.add(
-                                "Une transition END ne doit pas posséder de label."
-                        );
-                    }
-
-                    if (!transition.getPlayerReplies().isEmpty()) {
-                        errors.add(
-                                "Une transition END ne doit pas posséder de répliques Joueur."
-                        );
-                    }
-                }
-            }
-
-            /*
-             * Position.
-             */
-            if (transition.getPosition() <= 0) {
+            if (outgoing.size() != 1) {
                 errors.add(
-                        "Une transition depuis '"
-                                + source
-                                + "' possède une position invalide : "
-                                + transition.getPosition()
-                );
-            }
-
-            transitionCount.merge(
-                    source,
-                    1,
-                    Integer::sum
-            );
-        }
-
-        /*
-         * Chaque node doit posséder
-         * au moins une transition explicite.
-         */
-        for (DialogueNode node :
-                dialogue.getNodes()) {
-
-            if (!transitionCount.containsKey(
-                    node.getKey()
-            )) {
-                errors.add(
-                        "Le node '"
-                                + node.getKey()
-                                + "' ne possède aucune transition."
+                        "Le choix "
+                                + choice.key()
+                                + " doit posséder exactement "
+                                + "un lien sortant. Trouvés : "
+                                + outgoing.size()
+                                + "."
                 );
             }
         }
     }
 
     /**
-     * Vérifie la structure des répliques Joueur.
+     * Vérifie que les continuations respectent
+     * le vocabulaire structurel du dialogue.
      */
-    private void validatePlayerReplies(
-            Dialogue dialogue,
+    private void validateContinuationTargets(
+            DialogueGraph graph,
             List<String> errors
     ) {
-        for (DialogueTransition transition :
-                dialogue.getTransitions()) {
 
-            Set<Integer> replyPositions =
-                    new HashSet<>();
+        for (DialogueElement element :
+                graph.elements().values()) {
 
-            for (DialoguePlayerReply reply :
-                    transition.getPlayerReplies()) {
+            if (element instanceof DialogueBranch
+                    || element instanceof DialogueEnd) {
 
-                if (reply.getText().isBlank()) {
-                    errors.add(
-                            "Une réplique Joueur de la transition '"
-                                    + transition.getKey()
-                                    + "' possède un texte vide."
-                    );
-                }
+                continue;
+            }
 
-                if (reply.getPosition() <= 0) {
-                    errors.add(
-                            "Une réplique Joueur de la transition '"
-                                    + transition.getKey()
-                                    + "' possède une position invalide : "
-                                    + reply.getPosition()
-                    );
-                }
-
-                if (!replyPositions.add(
-                        reply.getPosition()
-                )) {
-                    errors.add(
-                            "Position de réplique Joueur dupliquée sur la transition '"
-                                    + transition.getKey()
-                                    + "' : "
-                                    + reply.getPosition()
-                    );
-                }
-
-                Set<Integer> actionPositions =
-                        new HashSet<>();
-
-                for (fr.doryamy.rpgengine.model.Action action :
-                        reply.getActions()) {
-                    if (action.getPosition() <= 0) {
-                        errors.add(
-                                "Une action de réplique Joueur possède une position invalide sur la transition '"
-                                        + transition.getKey()
-                                        + "'."
-                        );
-                    }
-
-                    if (!actionPositions.add(
-                            action.getPosition()
+            for (DialogueLink link :
+                    graph.outgoingLinks(
+                            element.key()
                     )) {
-                        errors.add(
-                                "Position d'action dupliquée dans une réplique Joueur de la transition '"
-                                        + transition.getKey()
-                                        + "' : "
-                                        + action.getPosition()
+
+                DialogueElement target =
+                        graph.require(
+                                link.target()
                         );
-                    }
+
+                if (target instanceof DialogueChoice) {
+
+                    errors.add(
+                            "L'élément "
+                                    + element.key()
+                                    + " ne peut pas cibler "
+                                    + "directement le choix "
+                                    + target.key()
+                                    + ". Un DialogueChoice doit "
+                                    + "être atteint depuis son "
+                                    + "DialogueBranch."
+                    );
+                }
+
+                if (target instanceof DialogueStart) {
+
+                    errors.add(
+                            "L'élément "
+                                    + element.key()
+                                    + " ne peut pas cibler "
+                                    + "le Start "
+                                    + target.key()
+                                    + "."
+                    );
                 }
             }
         }
     }
 
     /**
-     * Vérifie qu'au moins une destination terminale
-     * existe dans le dialogue.
+     * Valide les fins du dialogue.
      */
-    private void validateTerminalTransitions(
-            Dialogue dialogue,
+    private void validateEnds(
+            DialogueGraph graph,
             List<String> errors
     ) {
-        boolean hasTerminal =
-                dialogue.getTransitions()
-                        .stream()
-                        .anyMatch(
-                                DialogueTransition::isTerminal
-                        );
 
-        if (!hasTerminal) {
+        int endCount = 0;
+
+        for (DialogueElement element :
+                graph.elements().values()) {
+
+            if (!(element instanceof DialogueEnd end)) {
+                continue;
+            }
+
+            endCount++;
+
+            int outgoing =
+                    graph.outgoingLinks(
+                            end.key()
+                    ).size();
+
+            if (outgoing != 0) {
+                errors.add(
+                        "La fin "
+                                + end.key()
+                                + " ne doit posséder "
+                                + "aucun lien sortant."
+                );
+            }
+        }
+
+        if (endCount == 0) {
             errors.add(
-                    "Le dialogue ne possède aucune transition terminale."
+                    "Le dialogue doit contenir "
+                            + "au moins une fin."
             );
         }
     }
 
     /**
-     * Vérifie que tous les nodes sont accessibles
-     * depuis le node de départ.
+     * Vérifie que tous les éléments du graphe
+     * sont accessibles depuis Start.
      */
     private void validateReachability(
-            Dialogue dialogue,
+            DialogueGraph graph,
             List<String> errors
     ) {
-        String start =
-                dialogue.getStartNodeKey();
 
-        if (start == null
-                || !containsNode(
-                dialogue,
-                start
-        )) {
-            return;
-        }
-
-        Set<String> visited =
+        Set<DialogueElementKey> reachable =
                 new HashSet<>();
 
-        visit(
-                dialogue,
-                start,
-                visited
+        Deque<DialogueElementKey> pending =
+                new ArrayDeque<>();
+
+        pending.add(
+                graph.start().key()
         );
 
-        for (DialogueNode node :
-                dialogue.getNodes()) {
+        while (!pending.isEmpty()) {
 
-            if (!visited.contains(
-                    node.getKey()
-            )) {
+            DialogueElementKey current =
+                    pending.removeFirst();
+
+            if (!reachable.add(current)) {
+                continue;
+            }
+
+            for (DialogueLink link :
+                    graph.outgoingLinks(current)) {
+
+                pending.addLast(
+                        link.target()
+                );
+            }
+        }
+
+        for (DialogueElementKey key :
+                graph.elements().keySet()) {
+
+            if (!reachable.contains(key)) {
                 errors.add(
-                        "Le node '"
-                                + node.getKey()
-                                + "' est inaccessible depuis le node de départ."
+                        "L'élément "
+                                + key
+                                + " est inaccessible depuis "
+                                + "le Start."
                 );
             }
         }
     }
 
     /**
-     * Parcourt récursivement le graphe.
-     */
-    private void visit(
-            Dialogue dialogue,
-            String nodeKey,
-            Set<String> visited
-    ) {
-        if (!visited.add(nodeKey)) {
-            return;
-        }
-
-        for (DialogueTransition transition :
-                dialogue.getTransitions()) {
-
-            if (!transition
-                    .getSourceNodeKey()
-                    .equals(nodeKey)) {
-
-                continue;
-            }
-
-            if (transition.isTerminal()) {
-                continue;
-            }
-
-            String target =
-                    transition.getTargetNodeKey();
-
-            if (target != null
-                    && containsNode(
-                    dialogue,
-                    target
-            )) {
-
-                visit(
-                        dialogue,
-                        target,
-                        visited
-                );
-            }
-        }
-    }
-
-    /**
-     * Détecte les cycles constitués exclusivement
-     * de transitions AUTO.
+     * Vérifie que chaque élément peut atteindre
+     * au moins une fin de dialogue.
      *
-     * Une boucle contenant un choix joueur
-     * reste valide puisqu'elle nécessite
-     * une interaction explicite.
+     * <p>Les boucles sont autorisées dès lors
+     * qu'une sortie vers une fin reste possible.
      */
-    private void validateAutoLoops(
-            Dialogue dialogue,
+    private void validateEndReachability(
+            DialogueGraph graph,
             List<String> errors
     ) {
-        Set<String> visited =
+
+        Set<DialogueElementKey> canReachEnd =
                 new HashSet<>();
 
-        Set<String> recursionStack =
-                new HashSet<>();
+        Deque<DialogueElementKey> pending =
+                new ArrayDeque<>();
 
-        for (DialogueNode node :
-                dialogue.getNodes()) {
+        Map<
+                DialogueElementKey,
+                List<DialogueElementKey>
+                > reverseLinks =
+                buildReverseLinks(graph);
 
-            if (hasAutoCycle(
-                    dialogue,
-                    node.getKey(),
-                    visited,
-                    recursionStack
-            )) {
-                errors.add(
-                        "Une boucle infinie de transitions AUTO a été détectée."
+        for (DialogueElement element :
+                graph.elements().values()) {
+
+            if (element instanceof DialogueEnd) {
+
+                canReachEnd.add(
+                        element.key()
                 );
 
-                return;
+                pending.addLast(
+                        element.key()
+                );
+            }
+        }
+
+        while (!pending.isEmpty()) {
+
+            DialogueElementKey current =
+                    pending.removeFirst();
+
+            for (DialogueElementKey previous :
+                    reverseLinks.getOrDefault(
+                            current,
+                            List.of()
+                    )) {
+
+                if (canReachEnd.add(previous)) {
+                    pending.addLast(previous);
+                }
+            }
+        }
+
+        for (DialogueElementKey key :
+                graph.elements().keySet()) {
+
+            if (!canReachEnd.contains(key)) {
+                errors.add(
+                        "L'élément "
+                                + key
+                                + " ne possède aucun chemin "
+                                + "vers une fin de dialogue."
+                );
             }
         }
     }
 
     /**
-     * Recherche récursivement un cycle AUTO.
+     * Construit l'index inverse des liaisons.
      */
-    private boolean hasAutoCycle(
-            Dialogue dialogue,
-            String nodeKey,
-            Set<String> visited,
-            Set<String> recursionStack
+    private Map<
+            DialogueElementKey,
+            List<DialogueElementKey>
+            > buildReverseLinks(
+            DialogueGraph graph
     ) {
-        if (recursionStack.contains(
-                nodeKey
-        )) {
-            return true;
+
+        Map<
+                DialogueElementKey,
+                List<DialogueElementKey>
+                > reverse =
+                new HashMap<>();
+
+        for (DialogueLink link :
+                graph.links()) {
+
+            reverse.computeIfAbsent(
+                    link.target(),
+                    ignored ->
+                            new ArrayList<>()
+            ).add(
+                    link.source()
+            );
         }
 
-        if (visited.contains(
-                nodeKey
-        )) {
-            return false;
-        }
-
-        visited.add(nodeKey);
-        recursionStack.add(nodeKey);
-
-        for (DialogueTransition transition :
-                dialogue.getTransitions()) {
-
-            if (!transition
-                    .getSourceNodeKey()
-                    .equals(nodeKey)) {
-
-                continue;
-            }
-
-            if (transition.getType()
-                    != DialogueTransitionType.AUTO) {
-
-                continue;
-            }
-
-            if (transition.isTerminal()) {
-                continue;
-            }
-
-            String target =
-                    transition.getTargetNodeKey();
-
-            if (target != null
-                    && containsNode(
-                    dialogue,
-                    target
-            )
-                    && hasAutoCycle(
-                    dialogue,
-                    target,
-                    visited,
-                    recursionStack
-            )) {
-
-                return true;
-            }
-        }
-
-        recursionStack.remove(
-                nodeKey
-        );
-
-        return false;
-    }
-
-    /**
-     * Vérifie l'existence d'un node.
-     */
-    private boolean containsNode(
-            Dialogue dialogue,
-            String key
-    ) {
-        return dialogue.findNode(
-                key
-        ).isPresent();
+        return reverse;
     }
 }

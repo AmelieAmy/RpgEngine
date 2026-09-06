@@ -1,5 +1,7 @@
 package fr.doryamy.rpgengine.model;
 
+import java.util.Objects;
+
 /**
  * Représente une action configurée dans une règle RPG.
  *
@@ -29,12 +31,31 @@ public final class Action {
             String expression,
             int position
     ) {
+        if (provider == null || provider.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Le provider d'une action ne peut pas être vide."
+            );
+        }
+
         this.provider = provider;
-        this.expression = expression;
+
+        this.expression = Objects.requireNonNull(
+                expression,
+                "L'expression d'une action ne peut pas être null."
+        );
+
+        if (position < 0) {
+            throw new IllegalArgumentException(
+                    "La position d'une action ne peut pas être négative."
+            );
+        }
+
         this.position = position;
     }
 
-    public String getProvider() {return provider;}
+    public String getProvider() {
+        return provider;
+    }
 
     public String getExpression() {
         return expression;
@@ -43,5 +64,4 @@ public final class Action {
     public int getPosition() {
         return position;
     }
-
 }

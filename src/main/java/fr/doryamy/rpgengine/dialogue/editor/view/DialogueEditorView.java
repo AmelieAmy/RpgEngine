@@ -1,34 +1,38 @@
 package fr.doryamy.rpgengine.dialogue.editor.view;
 
-import fr.doryamy.rpgengine.quest.QuestState;
-
 import java.util.List;
+import java.util.Objects;
 
-/**
- * Projection complète d'un scénario destinée
- * à l'éditeur visuel de dialogues.
- *
- * <p>Cette vue agrège des informations provenant
- * du Dialogue Engine, du Trigger Engine et,
- * éventuellement, du système de quêtes.
- *
- * <p>Elle n'est jamais persistée directement.
- */
+/** Projection complète d'un Dialogue destinée à l'interface d'administration. */
 public record DialogueEditorView(
-        String title,
-        DialogueEditorTriggerView trigger,
-        DialogueEditorQuestView quest,
-        QuestState selectedState,
-        List<QuestState> availableStates,
-        DialogueEditorGraphView graph
+        String dialogueKey,
+        String name,
+        List<DialogueEditorTriggerView> triggers,
+        List<DialogueEditorQuestView> quests,
+        List<DialogueEditorElementView> elements,
+        List<DialogueEditorLinkView> links
 ) {
-
     public DialogueEditorView {
-        availableStates =
-                availableStates == null
-                        ? List.of()
-                        : List.copyOf(
-                        availableStates
-                );
+        dialogueKey = requireNonBlank(dialogueKey, "dialogueKey");
+        name = requireNonBlank(name, "name");
+        triggers = copyNonNull(triggers, "triggers");
+        quests = copyNonNull(quests, "quests");
+        elements = copyNonNull(elements, "elements");
+        links = copyNonNull(links, "links");
+    }
+
+    private static String requireNonBlank(String value, String name) {
+        Objects.requireNonNull(value, name);
+        String normalized = value.trim();
+        if (normalized.isEmpty()) throw new IllegalArgumentException(name + " ne peut pas être vide.");
+        return normalized;
+    }
+
+    private static <T> List<T> copyNonNull(List<T> values, String name) {
+        List<T> copy = List.copyOf(Objects.requireNonNull(values, name));
+        if (copy.stream().anyMatch(Objects::isNull)) {
+            throw new IllegalArgumentException(name + " contient une entrée nulle.");
+        }
+        return copy;
     }
 }

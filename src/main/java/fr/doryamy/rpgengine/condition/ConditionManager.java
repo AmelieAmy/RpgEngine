@@ -61,15 +61,51 @@ public final class ConditionManager {
     /**
      * Enregistre un provider de conditions.
      *
-     * Si un provider existe déjà sous le même nom, il est remplacé.
+     * Deux providers ne peuvent pas être enregistrés
+     * sous le même nom.
      *
      * @param provider provider à enregistrer
+     *
+     * @throws NullPointerException
+     * si le provider est null
+     *
+     * @throws IllegalArgumentException
+     * si son nom est vide
+     *
+     * @throws IllegalStateException
+     * si un provider est déjà enregistré sous ce nom
      */
-    public void register(ConditionProvider provider) {
-        providers.put(
-                provider.getProvider(),
-                provider
+    public void register(
+            ConditionProvider provider
+    ) {
+        Objects.requireNonNull(
+                provider,
+                "ConditionProvider ne peut pas être null."
         );
+
+        String providerName =
+                provider.getProvider();
+
+        if (providerName == null
+                || providerName.isBlank()) {
+
+            throw new IllegalArgumentException(
+                    "Le nom d'un ConditionProvider ne peut pas être vide."
+            );
+        }
+
+        ConditionProvider existing =
+                providers.putIfAbsent(
+                        providerName,
+                        provider
+                );
+
+        if (existing != null) {
+            throw new IllegalStateException(
+                    "ConditionProvider déjà enregistré : "
+                            + providerName
+            );
+        }
     }
 
     /**
@@ -89,11 +125,26 @@ public final class ConditionManager {
             TriggerContext context,
             List<Condition> conditions
     ) {
-        if (conditions == null || conditions.isEmpty()) {
+        Objects.requireNonNull(
+                context,
+                "TriggerContext ne peut pas être null."
+        );
+
+        Objects.requireNonNull(
+                conditions,
+                "La liste des conditions ne peut pas être null."
+        );
+
+        if (conditions.isEmpty()) {
             return true;
         }
 
         for (Condition condition : conditions) {
+
+            Objects.requireNonNull(
+                    condition,
+                    "Une condition ne peut pas être null."
+            );
 
             ConditionProvider provider =
                     providers.get(
@@ -107,6 +158,7 @@ public final class ConditionManager {
                                 + " | expression="
                                 + condition.getExpression()
                 );
+
                 return false;
             }
 
@@ -119,12 +171,14 @@ public final class ConditionManager {
                         );
 
             } catch (IllegalArgumentException e) {
+
                 RpgLogger.error(
                         "Expression de condition invalide : "
                                 + condition.getExpression()
                                 + " | "
                                 + e.getMessage()
                 );
+
                 return false;
             }
 

@@ -52,8 +52,7 @@ public final class PlayerConditionProvider implements ConditionProvider {
         String value =
                 repository.get(
                         context.getPlayer()
-                                .getUniqueId()
-                                .toString(),
+                                .getUniqueId(),
                         key
                 );
 

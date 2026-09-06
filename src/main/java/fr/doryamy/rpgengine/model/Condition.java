@@ -1,5 +1,7 @@
 package fr.doryamy.rpgengine.model;
 
+import java.util.Objects;
+
 /**
  * Représente une condition associée à une règle RPG.
  *
@@ -11,6 +13,7 @@ package fr.doryamy.rpgengine.model;
  * aucune logique métier.
  */
 public final class Condition {
+
     private final String provider;
     private final String expression;
 
@@ -24,8 +27,18 @@ public final class Condition {
             String provider,
             String expression
     ) {
+        if (provider == null || provider.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Le provider d'une condition ne peut pas être vide."
+            );
+        }
+
         this.provider = provider;
-        this.expression = expression;
+
+        this.expression = Objects.requireNonNull(
+                expression,
+                "L'expression d'une condition ne peut pas être null."
+        );
     }
 
     public String getProvider() {

@@ -2,32 +2,47 @@ package fr.doryamy.rpgengine.action.executors;
 
 import fr.doryamy.rpgengine.action.ActionExecutor;
 import fr.doryamy.rpgengine.dialogue.Dialogue;
-import fr.doryamy.rpgengine.dialogue.DialogueRepository;
+import fr.doryamy.rpgengine.dialogue.DialogueKey;
 import fr.doryamy.rpgengine.dialogue.DialogueRunner;
+import fr.doryamy.rpgengine.dialogue.DialogueService;
 import fr.doryamy.rpgengine.model.Action;
 import fr.doryamy.rpgengine.trigger.TriggerContext;
 import fr.doryamy.rpgengine.util.RpgLogger;
 
+import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Executor responsable du déclenchement d'un dialogue depuis une action.
- * Cette action correspond au provider "DIALOG".
- * L'expression contient la clé métier du dialogue à exécuter.
- * L'affichage lui-même est délégué à DialogueRunner.
+ * Déclenche un dialogue depuis une Action RPGEngine.
+ *
+ * <p>Provider :
+ * DIALOG
+ *
+ * <p>L'expression contient exclusivement
+ * la DialogueKey du dialogue à démarrer.
  */
 public final class DialogActionExecutor
         implements ActionExecutor {
 
-    private final DialogueRepository repository;
+    private final DialogueService dialogueService;
     private final DialogueRunner dialogueRunner;
 
     public DialogActionExecutor(
-            DialogueRepository repository,
+            DialogueService dialogueService,
             DialogueRunner dialogueRunner
     ) {
-        this.repository = repository;
-        this.dialogueRunner = dialogueRunner;
+
+        this.dialogueService =
+                Objects.requireNonNull(
+                        dialogueService,
+                        "dialogueService"
+                );
+
+        this.dialogueRunner =
+                Objects.requireNonNull(
+                        dialogueRunner,
+                        "dialogueRunner"
+                );
     }
 
     @Override
@@ -40,15 +55,42 @@ public final class DialogActionExecutor
             TriggerContext context,
             Action action
     ) {
-        String dialogueKey =
-                action.getExpression();
 
-        Optional<Dialogue> result =
-                repository.findByKey(
+        Objects.requireNonNull(
+                context,
+                "context"
+        );
+
+        Objects.requireNonNull(
+                action,
+                "action"
+        );
+
+        DialogueKey dialogueKey;
+
+        try {
+
+            dialogueKey =
+                    new DialogueKey(
+                            action.getExpression()
+                    );
+
+        } catch (IllegalArgumentException e) {
+
+            RpgLogger.error(
+                    "Clé de dialogue invalide dans une action DIALOG : "
+                            + action.getExpression()
+            );
+
+            return;
+        }
+
+        Optional<Dialogue> dialogue =
+                dialogueService.find(
                         dialogueKey
                 );
 
-        if (result.isEmpty()) {
+        if (dialogue.isEmpty()) {
 
             RpgLogger.error(
                     "Dialogue inconnu : "
@@ -59,8 +101,8 @@ public final class DialogActionExecutor
         }
 
         dialogueRunner.start(
-                context,
-                result.get()
+                dialogue.get(),
+                context
         );
     }
 }

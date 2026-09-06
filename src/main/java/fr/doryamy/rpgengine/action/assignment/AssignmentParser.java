@@ -25,13 +25,13 @@ public final class AssignmentParser {
      * avant l'opérateur "=".
      */
     private static final List<AssignmentOperator> ORDER =
-        List.of(
-            AssignmentOperator.ADD,
-            AssignmentOperator.SUBTRACT,
-            AssignmentOperator.MULTIPLY,
-            AssignmentOperator.DIVIDE,
-            AssignmentOperator.SET
-        );
+            List.of(
+                    AssignmentOperator.ADD,
+                    AssignmentOperator.SUBTRACT,
+                    AssignmentOperator.MULTIPLY,
+                    AssignmentOperator.DIVIDE,
+                    AssignmentOperator.SET
+            );
 
     /**
      * Analyse une affectation.
@@ -41,7 +41,8 @@ public final class AssignmentParser {
      * @return affectation analysée
      *
      * @throws IllegalArgumentException
-     * si l'expression est invalide
+     * si l'expression est vide, incomplète
+     * ou ne contient aucun opérateur supporté
      */
     public Assignment parse(String assignment) {
 
@@ -53,15 +54,42 @@ public final class AssignmentParser {
 
         for (AssignmentOperator operator : ORDER) {
 
-            String symbol = operator.getSymbol();
+            String symbol =
+                    operator.getSymbol();
 
-            int index = assignment.indexOf(symbol);
-            if (index == -1) {continue;}
-            String key = assignment.substring(0, index).trim();
+            int index =
+                    assignment.indexOf(
+                            symbol
+                    );
+
+            if (index == -1) {
+                continue;
+            }
+
+            String key =
+                    assignment.substring(
+                            0,
+                            index
+                    ).trim();
+
             String value =
                     assignment.substring(
                             index + symbol.length()
                     ).trim();
+
+            if (key.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "Clé absente dans : "
+                                + assignment
+                );
+            }
+
+            if (value.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "Valeur absente dans : "
+                                + assignment
+                );
+            }
 
             return new Assignment(
                     key,
@@ -71,9 +99,8 @@ public final class AssignmentParser {
         }
 
         throw new IllegalArgumentException(
-                "Opérateur inconnu : " + assignment
+                "Opérateur inconnu : "
+                        + assignment
         );
-
     }
-
 }
