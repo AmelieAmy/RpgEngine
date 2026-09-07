@@ -178,6 +178,24 @@ public final class NeoForgeBridge {
         dialogueEditorBridge.setDialogueRenameRequestHandler(handler);
     }
 
+    public void setDialogueInsertElementRequestHandler(
+            BiConsumer<UUID, Map<String, String>> handler
+    ) {
+        dialogueEditorBridge.setDialogueInsertElementRequestHandler(handler);
+    }
+
+    public void setDialogueElementTextUpdateRequestHandler(
+            BiConsumer<UUID, Map<String, String>> handler
+    ) {
+        dialogueEditorBridge.setDialogueElementTextUpdateRequestHandler(handler);
+    }
+
+    public void setDialogueElementDeleteRequestHandler(
+            BiConsumer<UUID, Map<String, String>> handler
+    ) {
+        dialogueEditorBridge.setDialogueElementDeleteRequestHandler(handler);
+    }
+
     public boolean openDialogueAdmin(
             UUID playerUuid,
             DialogueAdminView view

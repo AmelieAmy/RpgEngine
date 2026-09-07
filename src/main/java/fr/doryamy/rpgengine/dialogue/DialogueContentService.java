@@ -23,6 +23,39 @@ public final class DialogueContentService {
                 );
     }
 
+
+    /**
+     * Modifie le texte d'un élément dont le contenu est éditable.
+     *
+     * <p>Le type réel de l'élément est déterminé par le domaine, et non par
+     * la requête cliente. Cela évite de dupliquer une information qui peut
+     * être déduite autoritairement du graphe chargé.
+     */
+    public DialogueGraph updateElementText(
+            DialogueGraph graph,
+            DialogueElementKey elementKey,
+            String text
+    ) {
+
+        Objects.requireNonNull(graph, "graph");
+        Objects.requireNonNull(elementKey, "elementKey");
+        Objects.requireNonNull(text, "text");
+
+        DialogueElement element = graph.require(elementKey);
+
+        if (element instanceof DialogueReply) {
+            return updateReplyText(graph, elementKey, text);
+        }
+
+        if (element instanceof DialogueChoice) {
+            return updateChoiceText(graph, elementKey, text);
+        }
+
+        throw new IllegalArgumentException(
+                "L'élément " + elementKey + " ne possède pas de texte éditable."
+        );
+    }
+
     /**
      * Modifie le texte d'une réplique.
      */

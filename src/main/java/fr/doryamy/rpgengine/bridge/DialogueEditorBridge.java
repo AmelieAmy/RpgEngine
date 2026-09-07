@@ -42,6 +42,9 @@ public final class DialogueEditorBridge {
     private Method clearDialogueQuestRuleRequestHandlerMethod;
     private Method clearDialogueAdminRequestHandlerMethod;
     private Method clearDialogueRenameRequestHandlerMethod;
+    private Method clearDialogueInsertElementRequestHandlerMethod;
+    private Method clearDialogueElementTextUpdateRequestHandlerMethod;
+    private Method clearDialogueElementDeleteRequestHandlerMethod;
 
     private BiConsumer<UUID, String>
             dialogueEditorRequestHandler;
@@ -65,6 +68,15 @@ public final class DialogueEditorBridge {
 
     private BiConsumer<UUID, Map<String, String>>
             dialogueRenameRequestHandler;
+
+    private BiConsumer<UUID, Map<String, String>>
+            dialogueInsertElementRequestHandler;
+
+    private BiConsumer<UUID, Map<String, String>>
+            dialogueElementTextUpdateRequestHandler;
+
+    private BiConsumer<UUID, Map<String, String>>
+            dialogueElementDeleteRequestHandler;
 
     public DialogueEditorBridge(
             DialogueEditorTransportEncoder editorTransportEncoder,
@@ -181,6 +193,39 @@ public final class DialogueEditorBridge {
                         "clearDialogueRenameRequestHandler"
                 );
 
+        Method registerDialogueInsertElementRequestMethod =
+                bridgeClass.getMethod(
+                        "registerDialogueInsertElementRequestHandler",
+                        BiConsumer.class
+                );
+
+        clearDialogueInsertElementRequestHandlerMethod =
+                bridgeClass.getMethod(
+                        "clearDialogueInsertElementRequestHandler"
+                );
+
+        Method registerDialogueElementTextUpdateRequestMethod =
+                bridgeClass.getMethod(
+                        "registerDialogueElementTextUpdateRequestHandler",
+                        BiConsumer.class
+                );
+
+        clearDialogueElementTextUpdateRequestHandlerMethod =
+                bridgeClass.getMethod(
+                        "clearDialogueElementTextUpdateRequestHandler"
+                );
+
+        Method registerDialogueElementDeleteRequestMethod =
+                bridgeClass.getMethod(
+                        "registerDialogueElementDeleteRequestHandler",
+                        BiConsumer.class
+                );
+
+        clearDialogueElementDeleteRequestHandlerMethod =
+                bridgeClass.getMethod(
+                        "clearDialogueElementDeleteRequestHandler"
+                );
+
         openDialogueAdminMethod =
                 bridgeClass.getMethod(
                         "openDialogueAdmin",
@@ -249,6 +294,24 @@ public final class DialogueEditorBridge {
                 (BiConsumer<UUID, Map<String, String>>)
                         this::handleDialogueRenameRequest
         );
+
+        registerDialogueInsertElementRequestMethod.invoke(
+                null,
+                (BiConsumer<UUID, Map<String, String>>)
+                        this::handleDialogueInsertElementRequest
+        );
+
+        registerDialogueElementTextUpdateRequestMethod.invoke(
+                null,
+                (BiConsumer<UUID, Map<String, String>>)
+                        this::handleDialogueElementTextUpdateRequest
+        );
+
+        registerDialogueElementDeleteRequestMethod.invoke(
+                null,
+                (BiConsumer<UUID, Map<String, String>>)
+                        this::handleDialogueElementDeleteRequest
+        );
     }
 
     public void setDialogueEditorRequestHandler(
@@ -313,6 +376,27 @@ public final class DialogueEditorBridge {
             BiConsumer<UUID, Map<String, String>> handler
     ) {
         dialogueRenameRequestHandler = Objects.requireNonNull(handler, "handler");
+    }
+
+    public void setDialogueInsertElementRequestHandler(
+            BiConsumer<UUID, Map<String, String>> handler
+    ) {
+        dialogueInsertElementRequestHandler =
+                Objects.requireNonNull(handler, "handler");
+    }
+
+    public void setDialogueElementTextUpdateRequestHandler(
+            BiConsumer<UUID, Map<String, String>> handler
+    ) {
+        dialogueElementTextUpdateRequestHandler =
+                Objects.requireNonNull(handler, "handler");
+    }
+
+    public void setDialogueElementDeleteRequestHandler(
+            BiConsumer<UUID, Map<String, String>> handler
+    ) {
+        dialogueElementDeleteRequestHandler =
+                Objects.requireNonNull(handler, "handler");
     }
 
     public boolean openDialogueAdmin(
@@ -603,6 +687,84 @@ public final class DialogueEditorBridge {
         }
     }
 
+    private void handleDialogueInsertElementRequest(
+            UUID playerUuid,
+            Map<String, String> request
+    ) {
+        BiConsumer<UUID, Map<String, String>> handler =
+                dialogueInsertElementRequestHandler;
+
+        if (handler == null) {
+            RpgLogger.error(
+                    "REQUEST_INSERT_DIALOGUE_ELEMENT reçu mais aucun contrôleur d'administration n'est disponible."
+            );
+            return;
+        }
+
+        try {
+            handler.accept(playerUuid, Map.copyOf(request));
+        } catch (RuntimeException e) {
+            RpgLogger.error(
+                    "REQUEST_INSERT_DIALOGUE_ELEMENT refusé pour le joueur "
+                            + playerUuid
+                            + " : "
+                            + e.getMessage()
+            );
+        }
+    }
+
+    private void handleDialogueElementTextUpdateRequest(
+            UUID playerUuid,
+            Map<String, String> request
+    ) {
+        BiConsumer<UUID, Map<String, String>> handler =
+                dialogueElementTextUpdateRequestHandler;
+
+        if (handler == null) {
+            RpgLogger.error(
+                    "REQUEST_UPDATE_DIALOGUE_ELEMENT_TEXT reçu mais aucun contrôleur d'administration n'est disponible."
+            );
+            return;
+        }
+
+        try {
+            handler.accept(playerUuid, Map.copyOf(request));
+        } catch (RuntimeException e) {
+            RpgLogger.error(
+                    "REQUEST_UPDATE_DIALOGUE_ELEMENT_TEXT refusé pour le joueur "
+                            + playerUuid
+                            + " : "
+                            + e.getMessage()
+            );
+        }
+    }
+
+    private void handleDialogueElementDeleteRequest(
+            UUID playerUuid,
+            Map<String, String> request
+    ) {
+        BiConsumer<UUID, Map<String, String>> handler =
+                dialogueElementDeleteRequestHandler;
+
+        if (handler == null) {
+            RpgLogger.error(
+                    "REQUEST_DELETE_DIALOGUE_ELEMENT reçu mais aucun contrôleur d'administration n'est disponible."
+            );
+            return;
+        }
+
+        try {
+            handler.accept(playerUuid, Map.copyOf(request));
+        } catch (RuntimeException e) {
+            RpgLogger.error(
+                    "REQUEST_DELETE_DIALOGUE_ELEMENT refusé pour le joueur "
+                            + playerUuid
+                            + " : "
+                            + e.getMessage()
+            );
+        }
+    }
+
     private boolean invokeBoolean(
             Method method,
             UUID playerUuid,
@@ -692,6 +854,21 @@ public final class DialogueEditorBridge {
                 "REQUEST_RENAME_DIALOGUE"
         );
 
+        clearHandler(
+                clearDialogueInsertElementRequestHandlerMethod,
+                "REQUEST_INSERT_DIALOGUE_ELEMENT"
+        );
+
+        clearHandler(
+                clearDialogueElementTextUpdateRequestHandlerMethod,
+                "REQUEST_UPDATE_DIALOGUE_ELEMENT_TEXT"
+        );
+
+        clearHandler(
+                clearDialogueElementDeleteRequestHandlerMethod,
+                "REQUEST_DELETE_DIALOGUE_ELEMENT"
+        );
+
         dialogueEditorRequestHandler = null;
         dialogueCreateRequestHandler = null;
         dialogueNpcSelectionRequestHandler = null;
@@ -700,6 +877,9 @@ public final class DialogueEditorBridge {
         dialogueQuestRuleRequestHandler = null;
         dialogueAdminRequestHandler = null;
         dialogueRenameRequestHandler = null;
+        dialogueInsertElementRequestHandler = null;
+        dialogueElementTextUpdateRequestHandler = null;
+        dialogueElementDeleteRequestHandler = null;
 
         openDialogueEditorMethod = null;
         openDialogueAdminMethod = null;
@@ -713,6 +893,9 @@ public final class DialogueEditorBridge {
         clearDialogueQuestRuleRequestHandlerMethod = null;
         clearDialogueAdminRequestHandlerMethod = null;
         clearDialogueRenameRequestHandlerMethod = null;
+        clearDialogueInsertElementRequestHandlerMethod = null;
+        clearDialogueElementTextUpdateRequestHandlerMethod = null;
+        clearDialogueElementDeleteRequestHandlerMethod = null;
     }
 
     private void clearHandler(

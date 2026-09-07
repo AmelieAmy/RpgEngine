@@ -137,6 +137,25 @@ public final class DialogueEditingService {
     }
 
     /**
+     * Supprime un élément administrable sans exposer son type
+     * à la couche de transport.
+     */
+    public Dialogue deleteElement(
+            DialogueKey dialogueKey,
+            DialogueElementKey elementKey
+    ) {
+        Objects.requireNonNull(elementKey, "elementKey");
+
+        return mutateGraph(
+                dialogueKey,
+                graph -> graphService.deleteElement(
+                        graph,
+                        elementKey
+                )
+        );
+    }
+
+    /**
      * Supprime une réplique.
      */
     public Dialogue deleteReply(
@@ -202,6 +221,29 @@ public final class DialogueEditingService {
                                 graph,
                                 branchKey
                         )
+        );
+    }
+
+    /**
+     * Modifie le texte d'un élément éditable sans exposer son type
+     * à la couche de transport.
+     */
+    public Dialogue updateElementText(
+            DialogueKey dialogueKey,
+            DialogueElementKey elementKey,
+            String text
+    ) {
+
+        Objects.requireNonNull(elementKey, "elementKey");
+        Objects.requireNonNull(text, "text");
+
+        return mutateGraph(
+                dialogueKey,
+                graph -> contentService.updateElementText(
+                        graph,
+                        elementKey,
+                        text
+                )
         );
     }
 

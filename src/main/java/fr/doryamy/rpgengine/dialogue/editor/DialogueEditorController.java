@@ -5,6 +5,8 @@ import fr.doryamy.rpgengine.dialogue.Dialogue;
 import fr.doryamy.rpgengine.dialogue.DialogueKey;
 import fr.doryamy.rpgengine.dialogue.DialogueElementKey;
 import fr.doryamy.rpgengine.dialogue.DialogueRuleKey;
+import fr.doryamy.rpgengine.dialogue.DialogueInsertionPoint;
+import fr.doryamy.rpgengine.dialogue.DialogueReplySpeaker;
 import fr.doryamy.rpgengine.dialogue.DialogueEditingService;
 import fr.doryamy.rpgengine.dialogue.DialogueService;
 import fr.doryamy.rpgengine.dialogue.editor.selection.DialogueAdminNpcSelectionService;
@@ -340,6 +342,120 @@ public final class DialogueEditorController {
         } catch (RuntimeException e) {
             RpgLogger.error(
                     "REQUEST_SAVE_DIALOGUE_QUEST_RULE refusé pour le joueur "
+                            + playerUuid
+                            + " : "
+                            + e.getMessage()
+            );
+        }
+    }
+
+
+    /** Modifie le texte d'une Reply/Choice puis renvoie immédiatement l'éditeur actualisé. */
+    public void updateElementText(
+            UUID playerUuid,
+            Map<String, String> request
+    ) {
+        Objects.requireNonNull(playerUuid, "playerUuid");
+        Objects.requireNonNull(request, "request");
+
+        try {
+            DialogueKey dialogueKey = new DialogueKey(requireRequest(request, "dialogueKey"));
+            DialogueElementKey elementKey = new DialogueElementKey(requireRequest(request, "elementKey"));
+            String text = requireRequest(request, "text");
+
+            dialogueEditingService.updateElementText(
+                    dialogueKey,
+                    elementKey,
+                    text
+            );
+
+            openEditor(playerUuid, dialogueKey);
+
+        } catch (RuntimeException e) {
+            RpgLogger.error(
+                    "REQUEST_UPDATE_DIALOGUE_ELEMENT_TEXT refusé pour le joueur "
+                            + playerUuid
+                            + " : "
+                            + e.getMessage()
+            );
+        }
+    }
+
+    /** Supprime un élément administrable puis renvoie immédiatement l'éditeur actualisé. */
+    public void deleteElement(
+            UUID playerUuid,
+            Map<String, String> request
+    ) {
+        Objects.requireNonNull(playerUuid, "playerUuid");
+        Objects.requireNonNull(request, "request");
+
+        try {
+            DialogueKey dialogueKey =
+                    new DialogueKey(requireRequest(request, "dialogueKey"));
+            DialogueElementKey elementKey =
+                    new DialogueElementKey(requireRequest(request, "elementKey"));
+
+            dialogueEditingService.deleteElement(
+                    dialogueKey,
+                    elementKey
+            );
+
+            openEditor(playerUuid, dialogueKey);
+
+        } catch (RuntimeException e) {
+            RpgLogger.error(
+                    "REQUEST_DELETE_DIALOGUE_ELEMENT refusé pour le joueur "
+                            + playerUuid
+                            + " : "
+                            + e.getMessage()
+            );
+        }
+    }
+
+    /** Insère un nouvel élément métier/topologique sur une liaison existante puis renvoie l'éditeur actualisé. */
+    public void insertElement(
+            UUID playerUuid,
+            Map<String, String> request
+    ) {
+        Objects.requireNonNull(playerUuid, "playerUuid");
+        Objects.requireNonNull(request, "request");
+
+        try {
+            DialogueKey dialogueKey = new DialogueKey(requireRequest(request, "dialogueKey"));
+            DialogueElementKey sourceKey = new DialogueElementKey(requireRequest(request, "sourceKey"));
+            DialogueElementKey targetKey = new DialogueElementKey(requireRequest(request, "targetKey"));
+            String elementType = requireRequest(request, "elementType").toUpperCase();
+
+            DialogueInsertionPoint insertionPoint =
+                    new DialogueInsertionPoint(sourceKey, targetKey);
+
+            switch (elementType) {
+                case "REPLY" -> {
+                    DialogueReplySpeaker speaker = DialogueReplySpeaker.valueOf(
+                            requireRequest(request, "speaker").toUpperCase()
+                    );
+                    String text = requireRequest(request, "text");
+                    dialogueEditingService.insertReply(
+                            dialogueKey,
+                            insertionPoint,
+                            speaker,
+                            text
+                    );
+                }
+                case "BRANCH" -> dialogueEditingService.insertBranch(
+                        dialogueKey,
+                        insertionPoint
+                );
+                default -> throw new IllegalArgumentException(
+                        "Type d'élément insérable inconnu : " + elementType
+                );
+            }
+
+            openEditor(playerUuid, dialogueKey);
+
+        } catch (RuntimeException e) {
+            RpgLogger.error(
+                    "REQUEST_INSERT_DIALOGUE_ELEMENT refusé pour le joueur "
                             + playerUuid
                             + " : "
                             + e.getMessage()

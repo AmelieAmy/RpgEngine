@@ -366,6 +366,43 @@ public final class DialogueGraphService {
     }
 
     /**
+     * Supprime un élément administrable du graphe.
+     *
+     * <p>Cette entrée générique centralise la politique de suppression exposée
+     * à l'administration. Les suppressions spécialisées restent disponibles
+     * pour les règles structurelles propres à chaque type.
+     *
+     * <p>Pour l'instant, seule la suppression d'une Reply est activée.
+     */
+    public DialogueGraph deleteElement(
+            DialogueGraph graph,
+            DialogueElementKey elementKey
+    ) {
+        Objects.requireNonNull(graph, "graph");
+        Objects.requireNonNull(elementKey, "elementKey");
+
+        requireValid(graph);
+
+        DialogueElement element = graph.require(elementKey);
+
+        if (element instanceof DialogueReply) {
+            return deleteReply(graph, elementKey);
+        }
+        if (element instanceof DialogueChoice) {
+            return deleteChoice(graph, elementKey);
+        }
+        if (element instanceof DialogueBranch) {
+            return deleteBranch(graph, elementKey);
+        }
+
+        throw new IllegalArgumentException(
+                "La suppression de l'élément "
+                        + elementKey
+                        + " n'est pas autorisée pour ce type."
+        );
+    }
+
+    /**
      * Supprime une réplique en reconnectant
      * directement toutes ses entrées
      * vers sa continuation.
@@ -462,91 +499,66 @@ public final class DialogueGraphService {
             DialogueGraph graph,
             DialogueElementKey choiceKey
     ) {
-
-        Objects.requireNonNull(
-                graph,
-                "graph"
-        );
-
-        Objects.requireNonNull(
-                choiceKey,
-                "choiceKey"
-        );
-
+        Objects.requireNonNull(graph, "graph");
+        Objects.requireNonNull(choiceKey, "choiceKey");
         requireValid(graph);
 
-        DialogueElement element =
-                graph.require(choiceKey);
-
+        DialogueElement element = graph.require(choiceKey);
         if (!(element instanceof DialogueChoice)) {
             throw new IllegalArgumentException(
-                    "L'élément "
-                            + choiceKey
-                            + " n'est pas un choix."
+                    "L'élément " + choiceKey + " n'est pas un choix."
             );
         }
 
-        DialogueLink parentLink =
-                graph.incomingLinks(
-                                choiceKey
-                        )
-                        .getFirst();
+        DialogueElementKey branchKey = graph.incomingLinks(choiceKey).getFirst().source();
+        List<DialogueChoice> branchChoices = graph.choicesOf(branchKey);
 
-        DialogueElementKey branchKey =
-                parentLink.source();
+        if (branchChoices.size() == 2) {
+            DialogueChoice survivor = branchChoices.stream()
+                    .filter(choice -> !choice.key().equals(choiceKey))
+                    .findFirst()
+                    .orElseThrow();
 
-        List<DialogueChoice> branchChoices =
-                graph.choicesOf(
-                        branchKey
-                );
+            DialogueElementKey continuation = graph.outgoingLinks(survivor.key())
+                    .getFirst()
+                    .target();
+            List<DialogueLink> branchIncoming = graph.incomingLinks(branchKey);
 
-        if (branchChoices.size() <= 2) {
-            throw new IllegalStateException(
-                    "Impossible de supprimer le choix "
-                            + choiceKey
-                            + " : un embranchement doit conserver "
-                            + "au moins deux choix. "
-                            + "Supprimez l'embranchement complet "
-                            + "si nécessaire."
-            );
+            List<DialogueElement> elements = mutableElements(graph);
+            Set<DialogueLink> links = mutableLinks(graph);
+
+            // On détache d'abord le choix supprimé : toute sa branche devient
+            // inaccessible et peut être nettoyée selon le modèle arborescent.
+            removeElement(elements, choiceKey);
+            removeIncidentLinks(links, choiceKey);
+            removeUnreachableElements(elements, links, graph.start().key());
+
+            // Avec un seul choix restant, l'embranchement n'a plus de raison
+            // d'exister : on retire le losange et le Choice survivant, puis on
+            // reconnecte le flux principal directement à sa continuation.
+            removeElement(elements, branchKey);
+            removeIncidentLinks(links, branchKey);
+            removeElement(elements, survivor.key());
+            removeIncidentLinks(links, survivor.key());
+
+            for (DialogueLink incomingLink : branchIncoming) {
+                links.add(new DialogueLink(incomingLink.source(), continuation));
+            }
+
+            removeUnreachableElements(elements, links, graph.start().key());
+            return buildValidGraph(elements, links);
         }
 
-        List<DialogueElement> elements =
-                mutableElements(graph);
+        List<DialogueElement> elements = mutableElements(graph);
+        Set<DialogueLink> links = mutableLinks(graph);
 
-        Set<DialogueLink> links =
-                mutableLinks(graph);
+        removeElement(elements, choiceKey);
+        removeIncidentLinks(links, choiceKey);
+        removeUnreachableElements(elements, links, graph.start().key());
 
-        removeElement(
-                elements,
-                choiceKey
-        );
-
-        removeIncidentLinks(
-                links,
-                choiceKey
-        );
-
-        removeUnreachableElements(
-                elements,
-                links,
-                graph.start().key()
-        );
-
-        DialogueGraph result =
-                new DialogueGraph(
-                        elements,
-                        links
-                );
-
-        result =
-                normalizeChoicePositions(
-                        result,
-                        branchKey
-                );
-
+        DialogueGraph result = new DialogueGraph(elements, links);
+        result = normalizeChoicePositions(result, branchKey);
         requireValid(result);
-
         return result;
     }
 

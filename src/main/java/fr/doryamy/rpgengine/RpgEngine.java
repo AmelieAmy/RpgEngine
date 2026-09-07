@@ -385,6 +385,18 @@ public final class RpgEngine extends JavaPlugin {
                 dialogueEditorController::renameDialogue
         );
 
+        neoForgeBridge.setDialogueInsertElementRequestHandler(
+                dialogueEditorController::insertElement
+        );
+
+        neoForgeBridge.setDialogueElementTextUpdateRequestHandler(
+                dialogueEditorController::updateElementText
+        );
+
+        neoForgeBridge.setDialogueElementDeleteRequestHandler(
+                dialogueEditorController::deleteElement
+        );
+
         /*
          * ====================================================
          * Dialogue Runtime
