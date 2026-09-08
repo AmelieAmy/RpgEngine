@@ -32,6 +32,7 @@ public final class DialogueNamingService {
         Dialogue renamed = new Dialogue(
                 current.key(),
                 normalizedName,
+                current.rules(),
                 current.graph()
         );
 

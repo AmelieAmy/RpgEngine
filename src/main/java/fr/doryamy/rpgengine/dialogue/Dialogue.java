@@ -8,6 +8,7 @@ import java.util.Objects;
 public record Dialogue(
         DialogueKey key,
         String name,
+        DialogueRules rules,
         DialogueGraph graph
 ) {
 
@@ -16,6 +17,11 @@ public record Dialogue(
         Objects.requireNonNull(
                 key,
                 "La clé du dialogue ne peut pas être null."
+        );
+
+        Objects.requireNonNull(
+                rules,
+                "Les règles globales du dialogue ne peuvent pas être null."
         );
 
         Objects.requireNonNull(
@@ -30,5 +36,22 @@ public record Dialogue(
         }
 
         name = name.trim();
+    }
+
+    /**
+     * Constructeur de compatibilité pour les appelants qui ne
+     * définissent pas encore de règles globales.
+     */
+    public Dialogue(
+            DialogueKey key,
+            String name,
+            DialogueGraph graph
+    ) {
+        this(
+                key,
+                name,
+                DialogueRules.empty(),
+                graph
+        );
     }
 }

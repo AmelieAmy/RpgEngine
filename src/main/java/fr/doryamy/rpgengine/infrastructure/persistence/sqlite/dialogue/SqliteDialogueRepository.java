@@ -170,7 +170,7 @@ public final class SqliteDialogueRepository
 
             insertGraph(
                     dialogueId,
-                    dialogue.graph()
+                    dialogue
             );
         });
     }
@@ -212,7 +212,7 @@ public final class SqliteDialogueRepository
 
             insertGraph(
                     dialogueId,
-                    dialogue.graph()
+                    dialogue
             );
         });
     }
@@ -320,6 +320,7 @@ public final class SqliteDialogueRepository
         return new Dialogue(
                 dialogueKey,
                 name,
+                loaded.startRules(),
                 graph
         );
     }
@@ -351,6 +352,9 @@ public final class SqliteDialogueRepository
         Map<Long, DialogueElementKey>
                 keysByDatabaseId =
                 new HashMap<>();
+
+        DialogueRules startRules =
+                DialogueRules.empty();
 
         try (
                 PreparedStatement statement =
@@ -395,6 +399,11 @@ public final class SqliteDialogueRepository
                                     )
                             );
 
+                    String type = result.getString("type");
+                    if ("START".equals(type)) {
+                        startRules = rules;
+                    }
+
                     DialogueElement element =
                             buildElement(
                                     result,
@@ -420,7 +429,8 @@ public final class SqliteDialogueRepository
                 ),
                 Map.copyOf(
                         keysByDatabaseId
-                )
+                ),
+                startRules
         );
     }
 
@@ -863,8 +873,10 @@ public final class SqliteDialogueRepository
 
     private void insertGraph(
             long dialogueId,
-            DialogueGraph graph
+            Dialogue dialogue
     ) throws SQLException {
+
+        DialogueGraph graph = dialogue.graph();
 
         Map<DialogueElementKey, Long>
                 idsByKey =
@@ -881,11 +893,13 @@ public final class SqliteDialogueRepository
 
         insertConditions(
                 graph,
+                dialogue.rules(),
                 idsByKey
         );
 
         insertActions(
                 graph,
+                dialogue.rules(),
                 idsByKey
         );
     }
@@ -1179,6 +1193,7 @@ public final class SqliteDialogueRepository
 
     private void insertConditions(
             DialogueGraph graph,
+            DialogueRules dialogueRules,
             Map<DialogueElementKey, Long>
                     idsByKey
     ) throws SQLException {
@@ -1206,7 +1221,8 @@ public final class SqliteDialogueRepository
 
                 DialogueRules rules =
                         rulesOf(
-                                element
+                                element,
+                                dialogueRules
                         );
 
                 if (rules == null) {
@@ -1255,6 +1271,7 @@ public final class SqliteDialogueRepository
 
     private void insertActions(
             DialogueGraph graph,
+            DialogueRules dialogueRules,
             Map<DialogueElementKey, Long>
                     idsByKey
     ) throws SQLException {
@@ -1283,7 +1300,8 @@ public final class SqliteDialogueRepository
 
                 DialogueRules rules =
                         rulesOf(
-                                element
+                                element,
+                                dialogueRules
                         );
 
                 if (rules == null) {
@@ -1337,8 +1355,13 @@ public final class SqliteDialogueRepository
     }
 
     private DialogueRules rulesOf(
-            DialogueElement element
+            DialogueElement element,
+            DialogueRules dialogueRules
     ) {
+
+        if (element instanceof DialogueStart) {
+            return dialogueRules;
+        }
 
         if (element instanceof DialogueReply reply) {
             return reply.rules();
@@ -1549,7 +1572,8 @@ public final class SqliteDialogueRepository
     private record LoadedElements(
             List<DialogueElement> elements,
             Map<Long, DialogueElementKey>
-            keysByDatabaseId
+            keysByDatabaseId,
+            DialogueRules startRules
     ) {
     }
 }

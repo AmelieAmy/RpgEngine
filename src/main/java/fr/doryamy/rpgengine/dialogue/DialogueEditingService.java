@@ -298,7 +298,8 @@ public final class DialogueEditingService {
     }
 
     /**
-     * Ajoute une Condition à une Reply ou un Choice.
+     * Ajoute une Condition à une Reply, un Choice ou au Dialogue lui-même.
+     * Le Start sert uniquement d'identifiant de présentation des règles globales.
      */
     public Dialogue addCondition(
             DialogueKey dialogueKey,
@@ -306,27 +307,26 @@ public final class DialogueEditingService {
             String provider,
             String expression
     ) {
+        Objects.requireNonNull(ownerKey, "ownerKey");
 
-        Objects.requireNonNull(
-                ownerKey,
-                "ownerKey"
-        );
-
-        return mutateGraph(
+        return mutateRules(
                 dialogueKey,
-                graph ->
-                        ruleService.addCondition(
-                                graph,
-                                ownerKey,
-                                provider,
-                                expression
-                        )
+                ownerKey,
+                rules -> ruleService.addCondition(
+                        rules,
+                        provider,
+                        expression
+                ),
+                graph -> ruleService.addCondition(
+                        graph,
+                        ownerKey,
+                        provider,
+                        expression
+                )
         );
     }
 
-    /**
-     * Modifie une Condition existante.
-     */
+    /** Modifie une Condition existante. */
     public Dialogue updateCondition(
             DialogueKey dialogueKey,
             DialogueElementKey ownerKey,
@@ -334,90 +334,79 @@ public final class DialogueEditingService {
             String provider,
             String expression
     ) {
+        Objects.requireNonNull(ownerKey, "ownerKey");
+        Objects.requireNonNull(ruleKey, "ruleKey");
 
-        Objects.requireNonNull(
-                ownerKey,
-                "ownerKey"
-        );
-
-        Objects.requireNonNull(
-                ruleKey,
-                "ruleKey"
-        );
-
-        return mutateGraph(
+        return mutateRules(
                 dialogueKey,
-                graph ->
-                        ruleService.updateCondition(
-                                graph,
-                                ownerKey,
-                                ruleKey,
-                                provider,
-                                expression
-                        )
+                ownerKey,
+                rules -> ruleService.updateCondition(
+                        rules,
+                        ruleKey,
+                        provider,
+                        expression
+                ),
+                graph -> ruleService.updateCondition(
+                        graph,
+                        ownerKey,
+                        ruleKey,
+                        provider,
+                        expression
+                )
         );
     }
 
-    /**
-     * Supprime une Condition.
-     */
+    /** Supprime une Condition. */
     public Dialogue deleteCondition(
             DialogueKey dialogueKey,
             DialogueElementKey ownerKey,
             DialogueRuleKey ruleKey
     ) {
+        Objects.requireNonNull(ownerKey, "ownerKey");
+        Objects.requireNonNull(ruleKey, "ruleKey");
 
-        Objects.requireNonNull(
-                ownerKey,
-                "ownerKey"
-        );
-
-        Objects.requireNonNull(
-                ruleKey,
-                "ruleKey"
-        );
-
-        return mutateGraph(
+        return mutateRules(
                 dialogueKey,
-                graph ->
-                        ruleService.deleteCondition(
-                                graph,
-                                ownerKey,
-                                ruleKey
-                        )
+                ownerKey,
+                rules -> ruleService.deleteCondition(
+                        rules,
+                        ruleKey
+                ),
+                graph -> ruleService.deleteCondition(
+                        graph,
+                        ownerKey,
+                        ruleKey
+                )
         );
     }
 
-    /**
-     * Ajoute une Action à une Reply ou un Choice.
-     */
+    /** Ajoute une Action à une Reply, un Choice ou au Dialogue lui-même. */
     public Dialogue addAction(
             DialogueKey dialogueKey,
             DialogueElementKey ownerKey,
             String provider,
             String expression
     ) {
+        Objects.requireNonNull(ownerKey, "ownerKey");
 
-        Objects.requireNonNull(
-                ownerKey,
-                "ownerKey"
-        );
-
-        return mutateGraph(
+        return mutateRules(
                 dialogueKey,
-                graph ->
-                        ruleService.addAction(
-                                graph,
-                                ownerKey,
-                                provider,
-                                expression
-                        )
+                ownerKey,
+                rules -> ruleService.addAction(
+                        rules,
+                        provider,
+                        expression
+                ),
+                graph -> ruleService.addAction(
+                        graph,
+                        ownerKey,
+                        provider,
+                        expression
+                )
         );
     }
 
-    /**
-     * Modifie une Action existante.
-     */
+    /** Modifie une Action existante. */
     public Dialogue updateAction(
             DialogueKey dialogueKey,
             DialogueElementKey ownerKey,
@@ -425,57 +414,88 @@ public final class DialogueEditingService {
             String provider,
             String expression
     ) {
+        Objects.requireNonNull(ownerKey, "ownerKey");
+        Objects.requireNonNull(ruleKey, "ruleKey");
 
-        Objects.requireNonNull(
-                ownerKey,
-                "ownerKey"
-        );
-
-        Objects.requireNonNull(
-                ruleKey,
-                "ruleKey"
-        );
-
-        return mutateGraph(
+        return mutateRules(
                 dialogueKey,
-                graph ->
-                        ruleService.updateAction(
-                                graph,
-                                ownerKey,
-                                ruleKey,
-                                provider,
-                                expression
-                        )
+                ownerKey,
+                rules -> ruleService.updateAction(
+                        rules,
+                        ruleKey,
+                        provider,
+                        expression
+                ),
+                graph -> ruleService.updateAction(
+                        graph,
+                        ownerKey,
+                        ruleKey,
+                        provider,
+                        expression
+                )
         );
     }
 
-    /**
-     * Supprime une Action.
-     */
+    /** Supprime une Action. */
     public Dialogue deleteAction(
             DialogueKey dialogueKey,
             DialogueElementKey ownerKey,
             DialogueRuleKey ruleKey
     ) {
+        Objects.requireNonNull(ownerKey, "ownerKey");
+        Objects.requireNonNull(ruleKey, "ruleKey");
 
-        Objects.requireNonNull(
-                ownerKey,
-                "ownerKey"
-        );
-
-        Objects.requireNonNull(
-                ruleKey,
-                "ruleKey"
-        );
-
-        return mutateGraph(
+        return mutateRules(
                 dialogueKey,
-                graph ->
-                        ruleService.deleteAction(
-                                graph,
-                                ownerKey,
-                                ruleKey
-                        )
+                ownerKey,
+                rules -> ruleService.deleteAction(
+                        rules,
+                        ruleKey
+                ),
+                graph -> ruleService.deleteAction(
+                        graph,
+                        ownerKey,
+                        ruleKey
+                )
+        );
+    }
+
+    /**
+     * Route une mutation de règles vers le Dialogue si ownerKey désigne Start,
+     * sinon vers le propriétaire Reply/Choice dans le graphe.
+     */
+    private Dialogue mutateRules(
+            DialogueKey dialogueKey,
+            DialogueElementKey ownerKey,
+            UnaryOperator<DialogueRules> dialogueMutation,
+            UnaryOperator<DialogueGraph> graphMutation
+    ) {
+        Objects.requireNonNull(dialogueKey, "dialogueKey");
+        Objects.requireNonNull(dialogueMutation, "dialogueMutation");
+        Objects.requireNonNull(graphMutation, "graphMutation");
+
+        Dialogue current = dialogueService.require(dialogueKey);
+
+        if (current.graph().start().key().equals(ownerKey)) {
+            DialogueRules updatedRules = Objects.requireNonNull(
+                    dialogueMutation.apply(current.rules()),
+                    "Une mutation de règles globales ne peut pas retourner null."
+            );
+
+            return dialogueService.replaceRules(
+                    dialogueKey,
+                    updatedRules
+            );
+        }
+
+        DialogueGraph updatedGraph = Objects.requireNonNull(
+                graphMutation.apply(current.graph()),
+                "Une mutation de règles d'élément ne peut pas retourner null."
+        );
+
+        return dialogueService.replaceGraph(
+                dialogueKey,
+                updatedGraph
         );
     }
 

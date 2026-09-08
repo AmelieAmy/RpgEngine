@@ -183,8 +183,24 @@ public final class DialogueNavigator {
     }
 
     /**
+     * Indique si un ensemble de règles est satisfait
+     * dans le contexte courant. Utilisé notamment
+     * pour les règles globales d'un dialogue.
+     */
+    public boolean isAvailable(
+            TriggerContext context,
+            DialogueRules rules
+    ) {
+
+        Objects.requireNonNull(context, "context");
+        Objects.requireNonNull(rules, "rules");
+
+        return checkRules(context, rules);
+    }
+
+    /**
      * Évalue les Conditions appartenant
-     * à un élément de dialogue.
+     * à un élément ou au dialogue lui-même.
      */
     private boolean checkRules(
             TriggerContext context,

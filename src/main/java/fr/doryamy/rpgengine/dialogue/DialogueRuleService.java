@@ -8,11 +8,10 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Gère les Conditions et Actions appartenant
- * aux éléments d'un dialogue.
+ * Gère les Conditions et Actions d'un dialogue.
  *
- * <p>Seules les Reply et Choice peuvent posséder
- * des règles.
+ * <p>Les règles peuvent appartenir au Dialogue lui-même
+ * ou à une Reply / Choice.
  *
  * <p>Ce service ne modifie jamais la topologie
  * du graphe.
@@ -398,6 +397,164 @@ public final class DialogueRuleService {
                         previous.conditions(),
                         actions
                 )
+        );
+    }
+
+
+    /**
+     * Ajoute une Condition à un ensemble de règles indépendant du graphe.
+     * Utilisé pour les règles globales du Dialogue.
+     */
+    public DialogueRules addCondition(
+            DialogueRules previous,
+            String provider,
+            String expression
+    ) {
+        Objects.requireNonNull(previous, "previous");
+
+        List<DialogueConditionEntry> conditions =
+                new ArrayList<>(previous.conditions());
+
+        conditions.add(
+                new DialogueConditionEntry(
+                        nextKey(),
+                        new Condition(provider, expression)
+                )
+        );
+
+        return new DialogueRules(
+                conditions,
+                previous.actions()
+        );
+    }
+
+    /** Modifie une Condition dans un ensemble de règles indépendant du graphe. */
+    public DialogueRules updateCondition(
+            DialogueRules previous,
+            DialogueRuleKey ruleKey,
+            String provider,
+            String expression
+    ) {
+        Objects.requireNonNull(previous, "previous");
+        Objects.requireNonNull(ruleKey, "ruleKey");
+
+        List<DialogueConditionEntry> conditions =
+                new ArrayList<>(previous.conditions());
+
+        int index = findConditionIndex(conditions, ruleKey);
+        conditions.set(
+                index,
+                new DialogueConditionEntry(
+                        ruleKey,
+                        new Condition(provider, expression)
+                )
+        );
+
+        return new DialogueRules(
+                conditions,
+                previous.actions()
+        );
+    }
+
+    /** Supprime une Condition dans un ensemble de règles indépendant du graphe. */
+    public DialogueRules deleteCondition(
+            DialogueRules previous,
+            DialogueRuleKey ruleKey
+    ) {
+        Objects.requireNonNull(previous, "previous");
+        Objects.requireNonNull(ruleKey, "ruleKey");
+
+        List<DialogueConditionEntry> conditions =
+                new ArrayList<>(previous.conditions());
+        conditions.remove(findConditionIndex(conditions, ruleKey));
+
+        return new DialogueRules(
+                conditions,
+                previous.actions()
+        );
+    }
+
+    /** Ajoute une Action à un ensemble de règles indépendant du graphe. */
+    public DialogueRules addAction(
+            DialogueRules previous,
+            String provider,
+            String expression
+    ) {
+        Objects.requireNonNull(previous, "previous");
+
+        int position = previous.actions()
+                .stream()
+                .mapToInt(entry -> entry.action().getPosition())
+                .max()
+                .orElse(-1)
+                + 1;
+
+        List<DialogueActionEntry> actions =
+                new ArrayList<>(previous.actions());
+
+        actions.add(
+                new DialogueActionEntry(
+                        nextKey(),
+                        new Action(provider, expression, position)
+                )
+        );
+
+        return new DialogueRules(
+                previous.conditions(),
+                actions
+        );
+    }
+
+    /** Modifie une Action en conservant sa position d'exécution. */
+    public DialogueRules updateAction(
+            DialogueRules previous,
+            DialogueRuleKey ruleKey,
+            String provider,
+            String expression
+    ) {
+        Objects.requireNonNull(previous, "previous");
+        Objects.requireNonNull(ruleKey, "ruleKey");
+
+        List<DialogueActionEntry> actions =
+                new ArrayList<>(previous.actions());
+
+        int index = findActionIndex(actions, ruleKey);
+        DialogueActionEntry current = actions.get(index);
+
+        actions.set(
+                index,
+                new DialogueActionEntry(
+                        ruleKey,
+                        new Action(
+                                provider,
+                                expression,
+                                current.action().getPosition()
+                        )
+                )
+        );
+
+        return new DialogueRules(
+                previous.conditions(),
+                actions
+        );
+    }
+
+    /** Supprime une Action et normalise les positions restantes. */
+    public DialogueRules deleteAction(
+            DialogueRules previous,
+            DialogueRuleKey ruleKey
+    ) {
+        Objects.requireNonNull(previous, "previous");
+        Objects.requireNonNull(ruleKey, "ruleKey");
+
+        List<DialogueActionEntry> actions =
+                new ArrayList<>(previous.actions());
+        actions.remove(findActionIndex(actions, ruleKey));
+        actions = normalizeActionPositions(actions);
+
+        return new DialogueRules(
+                previous.conditions(),
+                actions
         );
     }
 

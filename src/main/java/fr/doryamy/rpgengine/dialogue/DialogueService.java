@@ -88,6 +88,7 @@ public final class DialogueService {
                 new Dialogue(
                         key,
                         name,
+                        DialogueRules.empty(),
                         graph
                 );
 
@@ -169,6 +170,7 @@ public final class DialogueService {
                 new Dialogue(
                         current.key(),
                         name,
+                        current.rules(),
                         current.graph()
                 );
 
@@ -210,6 +212,7 @@ public final class DialogueService {
                 new Dialogue(
                         current.key(),
                         current.name(),
+                        current.rules(),
                         graph
                 );
 
@@ -224,6 +227,45 @@ public final class DialogueService {
         return updated;
     }
 
+
+
+    /**
+     * Persiste de nouvelles règles globales pour
+     * un dialogue existant sans modifier son graphe.
+     */
+    public Dialogue replaceRules(
+            DialogueKey key,
+            DialogueRules rules
+    ) {
+
+        Objects.requireNonNull(
+                rules,
+                "rules"
+        );
+
+        Dialogue current =
+                require(
+                        key
+                );
+
+        Dialogue updated =
+                new Dialogue(
+                        current.key(),
+                        current.name(),
+                        rules,
+                        current.graph()
+                );
+
+        requireValid(
+                updated
+        );
+
+        repository.update(
+                updated
+        );
+
+        return updated;
+    }
     /**
      * Supprime définitivement un dialogue.
      */

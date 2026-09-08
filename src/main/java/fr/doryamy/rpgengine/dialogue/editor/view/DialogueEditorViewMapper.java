@@ -43,7 +43,7 @@ public final class DialogueEditorViewMapper {
                 .elements()
                 .values()
                 .stream()
-                .map(this::presentElement)
+                .map(element -> presentElement(element, dialogue.rules()))
                 .toList();
 
         List<DialogueEditorLinkView> links = dialogue.graph()
@@ -80,9 +80,16 @@ public final class DialogueEditorViewMapper {
         );
     }
 
-    private DialogueEditorElementView presentElement(DialogueElement element) {
+    private DialogueEditorElementView presentElement(
+            DialogueElement element,
+            fr.doryamy.rpgengine.dialogue.DialogueRules dialogueRules
+    ) {
         return switch (element) {
-            case DialogueStart start -> new DialogueEditorStartView(start.key().value());
+            case DialogueStart start -> new DialogueEditorStartView(
+                    start.key().value(),
+                    presentConditions(dialogueRules.conditions()),
+                    presentActions(dialogueRules.actions())
+            );
             case DialogueReply reply -> new DialogueEditorReplyView(
                     reply.key().value(),
                     reply.speaker().name(),

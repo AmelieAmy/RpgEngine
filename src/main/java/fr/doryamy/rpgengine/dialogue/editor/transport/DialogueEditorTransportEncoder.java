@@ -31,7 +31,7 @@ import java.util.Objects;
  */
 public final class DialogueEditorTransportEncoder {
 
-    public static final int PROTOCOL_VERSION = 3;
+    public static final int PROTOCOL_VERSION = 4;
 
     private final Gson gson =
             new GsonBuilder()
@@ -188,6 +188,16 @@ public final class DialogueEditorTransportEncoder {
                         start.key(),
                         "START"
                 );
+
+        json.add(
+                "conditions",
+                encodeConditions(start.conditions())
+        );
+
+        json.add(
+                "actions",
+                encodeActions(start.actions())
+        );
 
         return json;
     }

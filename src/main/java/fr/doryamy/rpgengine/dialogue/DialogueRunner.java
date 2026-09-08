@@ -103,6 +103,26 @@ public final class DialogueRunner {
             );
         }
 
+        /*
+         * Les règles globales appartiennent au Dialogue.
+         * Elles sont évaluées avant toute création de session.
+         */
+        if (!navigator.isAvailable(
+                context,
+                dialogue.rules()
+        )) {
+            return;
+        }
+
+        /*
+         * Les Actions globales s'exécutent une seule fois
+         * à l'entrée du dialogue.
+         */
+        executeActions(
+                context,
+                dialogue.rules()
+        );
+
         DialogueSession session =
                 sessionManager.create(
                         dialogue,
