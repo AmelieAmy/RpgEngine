@@ -111,6 +111,8 @@ src
                             view
                                 DialogueChoiceView.java
                                 DialogueInteractionType.java
+                                DialogueParticipantType.java
+                                DialogueParticipantView.java
                                 DialoguePresenter.java
                                 DialogueView.java
                         Dialogue.java

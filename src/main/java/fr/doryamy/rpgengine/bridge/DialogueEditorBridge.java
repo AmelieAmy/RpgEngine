@@ -45,6 +45,8 @@ public final class DialogueEditorBridge {
     private Method clearDialogueInsertElementRequestHandlerMethod;
     private Method clearDialogueElementTextUpdateRequestHandlerMethod;
     private Method clearDialogueElementDeleteRequestHandlerMethod;
+    private Method clearDialogueRuleDeleteRequestHandlerMethod;
+    private Method clearDialogueAddChoiceRequestHandlerMethod;
 
     private BiConsumer<UUID, String>
             dialogueEditorRequestHandler;
@@ -77,6 +79,12 @@ public final class DialogueEditorBridge {
 
     private BiConsumer<UUID, Map<String, String>>
             dialogueElementDeleteRequestHandler;
+
+    private BiConsumer<UUID, Map<String, String>>
+            dialogueRuleDeleteRequestHandler;
+
+    private BiConsumer<UUID, Map<String, String>>
+            dialogueAddChoiceRequestHandler;
 
     public DialogueEditorBridge(
             DialogueEditorTransportEncoder editorTransportEncoder,
@@ -226,6 +234,28 @@ public final class DialogueEditorBridge {
                         "clearDialogueElementDeleteRequestHandler"
                 );
 
+        Method registerDialogueAddChoiceRequestMethod =
+                bridgeClass.getMethod(
+                        "registerDialogueAddChoiceRequestHandler",
+                        BiConsumer.class
+                );
+
+        clearDialogueAddChoiceRequestHandlerMethod =
+                bridgeClass.getMethod(
+                        "clearDialogueAddChoiceRequestHandler"
+                );
+
+        Method registerDialogueRuleDeleteRequestMethod =
+                bridgeClass.getMethod(
+                        "registerDialogueRuleDeleteRequestHandler",
+                        BiConsumer.class
+                );
+
+        clearDialogueRuleDeleteRequestHandlerMethod =
+                bridgeClass.getMethod(
+                        "clearDialogueRuleDeleteRequestHandler"
+                );
+
         openDialogueAdminMethod =
                 bridgeClass.getMethod(
                         "openDialogueAdmin",
@@ -312,6 +342,18 @@ public final class DialogueEditorBridge {
                 (BiConsumer<UUID, Map<String, String>>)
                         this::handleDialogueElementDeleteRequest
         );
+
+        registerDialogueAddChoiceRequestMethod.invoke(
+                null,
+                (BiConsumer<UUID, Map<String, String>>)
+                        this::handleDialogueAddChoiceRequest
+        );
+
+        registerDialogueRuleDeleteRequestMethod.invoke(
+                null,
+                (BiConsumer<UUID, Map<String, String>>)
+                        this::handleDialogueRuleDeleteRequest
+        );
     }
 
     public void setDialogueEditorRequestHandler(
@@ -396,6 +438,19 @@ public final class DialogueEditorBridge {
             BiConsumer<UUID, Map<String, String>> handler
     ) {
         dialogueElementDeleteRequestHandler =
+                Objects.requireNonNull(handler, "handler");
+    }
+
+    public void setDialogueAddChoiceRequestHandler(
+            BiConsumer<UUID, Map<String, String>> handler
+    ) {
+        dialogueAddChoiceRequestHandler = Objects.requireNonNull(handler, "handler");
+    }
+
+    public void setDialogueRuleDeleteRequestHandler(
+            BiConsumer<UUID, Map<String, String>> handler
+    ) {
+        dialogueRuleDeleteRequestHandler =
                 Objects.requireNonNull(handler, "handler");
     }
 
@@ -765,6 +820,47 @@ public final class DialogueEditorBridge {
         }
     }
 
+    private void handleDialogueAddChoiceRequest(
+            UUID playerUuid,
+            Map<String, String> request
+    ) {
+        BiConsumer<UUID, Map<String, String>> handler = dialogueAddChoiceRequestHandler;
+        if (handler == null) {
+            RpgLogger.error("Aucun handler ADD_DIALOGUE_CHOICE enregistré côté plugin.");
+            return;
+        }
+        handler.accept(playerUuid, Map.copyOf(request));
+    }
+
+    private void handleDialogueRuleDeleteRequest(
+            UUID playerUuid,
+            Map<String, String> request
+    ) {
+        BiConsumer<UUID, Map<String, String>> handler =
+                dialogueRuleDeleteRequestHandler;
+
+        if (handler == null) {
+            RpgLogger.error(
+                    "REQUEST_DELETE_DIALOGUE_RULE reçu mais aucun contrôleur d'administration n'est disponible."
+            );
+            return;
+        }
+
+        try {
+            handler.accept(
+                    playerUuid,
+                    Map.copyOf(request)
+            );
+        } catch (RuntimeException e) {
+            RpgLogger.error(
+                    "REQUEST_DELETE_DIALOGUE_RULE refusé pour le joueur "
+                            + playerUuid
+                            + " : "
+                            + e.getMessage()
+            );
+        }
+    }
+
     private boolean invokeBoolean(
             Method method,
             UUID playerUuid,
@@ -869,6 +965,16 @@ public final class DialogueEditorBridge {
                 "REQUEST_DELETE_DIALOGUE_ELEMENT"
         );
 
+        clearHandler(
+                clearDialogueRuleDeleteRequestHandlerMethod,
+                "REQUEST_DELETE_DIALOGUE_RULE"
+        );
+
+        clearHandler(
+                clearDialogueAddChoiceRequestHandlerMethod,
+                "REQUEST_ADD_DIALOGUE_CHOICE"
+        );
+
         dialogueEditorRequestHandler = null;
         dialogueCreateRequestHandler = null;
         dialogueNpcSelectionRequestHandler = null;
@@ -880,6 +986,8 @@ public final class DialogueEditorBridge {
         dialogueInsertElementRequestHandler = null;
         dialogueElementTextUpdateRequestHandler = null;
         dialogueElementDeleteRequestHandler = null;
+        dialogueRuleDeleteRequestHandler = null;
+        dialogueAddChoiceRequestHandler = null;
 
         openDialogueEditorMethod = null;
         openDialogueAdminMethod = null;
@@ -896,6 +1004,8 @@ public final class DialogueEditorBridge {
         clearDialogueInsertElementRequestHandlerMethod = null;
         clearDialogueElementTextUpdateRequestHandlerMethod = null;
         clearDialogueElementDeleteRequestHandlerMethod = null;
+        clearDialogueRuleDeleteRequestHandlerMethod = null;
+        clearDialogueAddChoiceRequestHandlerMethod = null;
     }
 
     private void clearHandler(

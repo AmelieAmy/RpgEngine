@@ -207,6 +207,37 @@ public final class DialogueRuleService {
     }
 
     /**
+     * Supprime une règle sans demander à la couche appelante
+     * si sa clé désigne une Condition ou une Action.
+     */
+    public DialogueGraph deleteRule(
+            DialogueGraph graph,
+            DialogueElementKey ownerKey,
+            DialogueRuleKey ruleKey
+    ) {
+        Objects.requireNonNull(graph, "graph");
+        Objects.requireNonNull(ownerKey, "ownerKey");
+        Objects.requireNonNull(ruleKey, "ruleKey");
+
+        requireValid(graph);
+
+        DialogueRules previous =
+                requireRulesOwner(
+                        graph,
+                        ownerKey
+                );
+
+        return replaceRules(
+                graph,
+                ownerKey,
+                deleteRule(
+                        previous,
+                        ruleKey
+                )
+        );
+    }
+
+    /**
      * Ajoute une Action à la fin
      * de l'ordre d'exécution.
      */
@@ -471,6 +502,51 @@ public final class DialogueRuleService {
         return new DialogueRules(
                 conditions,
                 previous.actions()
+        );
+    }
+
+    /**
+     * Supprime une règle dans un ensemble indépendant du graphe,
+     * sans exposer son type à la couche de transport.
+     */
+    public DialogueRules deleteRule(
+            DialogueRules previous,
+            DialogueRuleKey ruleKey
+    ) {
+        Objects.requireNonNull(previous, "previous");
+        Objects.requireNonNull(ruleKey, "ruleKey");
+
+        boolean conditionExists =
+                previous.conditions()
+                        .stream()
+                        .anyMatch(entry ->
+                                entry.key().equals(ruleKey)
+                        );
+
+        if (conditionExists) {
+            return deleteCondition(
+                    previous,
+                    ruleKey
+            );
+        }
+
+        boolean actionExists =
+                previous.actions()
+                        .stream()
+                        .anyMatch(entry ->
+                                entry.key().equals(ruleKey)
+                        );
+
+        if (actionExists) {
+            return deleteAction(
+                    previous,
+                    ruleKey
+            );
+        }
+
+        throw new IllegalArgumentException(
+                "Règle introuvable : "
+                        + ruleKey
         );
     }
 

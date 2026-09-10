@@ -380,6 +380,33 @@ public final class DialogueEditingService {
         );
     }
 
+    /**
+     * Supprime une règle sans exposer au transport
+     * s'il s'agit d'une Condition ou d'une Action.
+     */
+    public Dialogue deleteRule(
+            DialogueKey dialogueKey,
+            DialogueElementKey ownerKey,
+            DialogueRuleKey ruleKey
+    ) {
+        Objects.requireNonNull(ownerKey, "ownerKey");
+        Objects.requireNonNull(ruleKey, "ruleKey");
+
+        return mutateRules(
+                dialogueKey,
+                ownerKey,
+                rules -> ruleService.deleteRule(
+                        rules,
+                        ruleKey
+                ),
+                graph -> ruleService.deleteRule(
+                        graph,
+                        ownerKey,
+                        ruleKey
+                )
+        );
+    }
+
     /** Ajoute une Action à une Reply, un Choice ou au Dialogue lui-même. */
     public Dialogue addAction(
             DialogueKey dialogueKey,

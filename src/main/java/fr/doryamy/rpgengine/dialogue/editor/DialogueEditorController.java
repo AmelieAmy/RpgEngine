@@ -350,6 +350,89 @@ public final class DialogueEditorController {
     }
 
 
+    /**
+     * Supprime une règle administrable puis renvoie immédiatement
+     * l'éditeur reconstruit depuis l'état serveur courant.
+     *
+     * <p>La requête ne contient volontairement pas le type de règle.
+     */
+    /** Ajoute un nouveau choix à un embranchement puis renvoie l'éditeur actualisé. */
+    public void addChoice(
+            UUID playerUuid,
+            Map<String, String> request
+    ) {
+        Objects.requireNonNull(playerUuid, "playerUuid");
+        Objects.requireNonNull(request, "request");
+
+        try {
+            DialogueKey dialogueKey = new DialogueKey(requireRequest(request, "dialogueKey"));
+            DialogueElementKey branchKey = new DialogueElementKey(requireRequest(request, "branchKey"));
+
+            dialogueEditingService.addChoice(dialogueKey, branchKey);
+            openEditor(playerUuid, dialogueKey);
+
+        } catch (RuntimeException e) {
+            RpgLogger.error(
+                    "REQUEST_ADD_DIALOGUE_CHOICE refusé pour le joueur "
+                            + playerUuid + " : " + e.getMessage()
+            );
+        }
+    }
+
+    public void deleteRule(
+            UUID playerUuid,
+            Map<String, String> request
+    ) {
+        Objects.requireNonNull(playerUuid, "playerUuid");
+        Objects.requireNonNull(request, "request");
+
+        try {
+            DialogueKey dialogueKey =
+                    new DialogueKey(
+                            requireRequest(
+                                    request,
+                                    "dialogueKey"
+                            )
+                    );
+
+            DialogueElementKey ownerKey =
+                    new DialogueElementKey(
+                            requireRequest(
+                                    request,
+                                    "ownerKey"
+                            )
+                    );
+
+            DialogueRuleKey ruleKey =
+                    new DialogueRuleKey(
+                            requireRequest(
+                                    request,
+                                    "ruleKey"
+                            )
+                    );
+
+            dialogueEditingService.deleteRule(
+                    dialogueKey,
+                    ownerKey,
+                    ruleKey
+            );
+
+            openEditor(
+                    playerUuid,
+                    dialogueKey
+            );
+
+        } catch (RuntimeException e) {
+            RpgLogger.error(
+                    "REQUEST_DELETE_DIALOGUE_RULE refusé pour le joueur "
+                            + playerUuid
+                            + " : "
+                            + e.getMessage()
+            );
+        }
+    }
+
+
     /** Modifie le texte d'une Reply/Choice puis renvoie immédiatement l'éditeur actualisé. */
     public void updateElementText(
             UUID playerUuid,

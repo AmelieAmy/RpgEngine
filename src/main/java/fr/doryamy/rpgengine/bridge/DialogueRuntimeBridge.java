@@ -3,6 +3,7 @@ package fr.doryamy.rpgengine.bridge;
 import fr.doryamy.rpgengine.dialogue.DialogueElementKey;
 import fr.doryamy.rpgengine.dialogue.DialogueRunner;
 import fr.doryamy.rpgengine.dialogue.runtime.view.DialogueChoiceView;
+import fr.doryamy.rpgengine.dialogue.runtime.view.DialogueParticipantView;
 import fr.doryamy.rpgengine.dialogue.runtime.view.DialogueView;
 import fr.doryamy.rpgengine.util.RpgLogger;
 
@@ -134,6 +135,9 @@ public final class DialogueRuntimeBridge {
                 bridgeClass.getMethod(
                         "showDialogue",
                         UUID.class,
+                        String[].class,
+                        String[].class,
+                        String[].class,
                         String.class,
                         String.class,
                         String.class,
@@ -208,6 +212,38 @@ public final class DialogueRuntimeBridge {
             return false;
         }
 
+        int participantCount =
+                view.participants()
+                        .size();
+
+        String[] participantKeys =
+                new String[participantCount];
+
+        String[] participantTypes =
+                new String[participantCount];
+
+        String[] participantDisplayNames =
+                new String[participantCount];
+
+        for (int i = 0;
+             i < participantCount;
+             i++) {
+
+            DialogueParticipantView participant =
+                    view.participants()
+                            .get(i);
+
+            participantKeys[i] =
+                    participant.key();
+
+            participantTypes[i] =
+                    participant.type()
+                            .name();
+
+            participantDisplayNames[i] =
+                    participant.displayName();
+        }
+
         int size =
                 view.choices()
                         .size();
@@ -245,7 +281,10 @@ public final class DialogueRuntimeBridge {
                     showDialogueMethod.invoke(
                             null,
                             playerUuid,
-                            view.speaker(),
+                            participantKeys,
+                            participantTypes,
+                            participantDisplayNames,
+                            view.activeParticipantKey(),
                             view.text(),
                             view.interactionType()
                                     .name(),

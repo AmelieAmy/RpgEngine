@@ -196,6 +196,20 @@ public final class NeoForgeBridge {
         dialogueEditorBridge.setDialogueElementDeleteRequestHandler(handler);
     }
 
+    public void setDialogueAddChoiceRequestHandler(
+            BiConsumer<UUID, Map<String, String>> handler
+    ) {
+        dialogueEditorBridge.setDialogueAddChoiceRequestHandler(handler);
+    }
+
+    public void setDialogueRuleDeleteRequestHandler(
+            BiConsumer<UUID, Map<String, String>> handler
+    ) {
+        dialogueEditorBridge.setDialogueRuleDeleteRequestHandler(
+                handler
+        );
+    }
+
     public boolean openDialogueAdmin(
             UUID playerUuid,
             DialogueAdminView view

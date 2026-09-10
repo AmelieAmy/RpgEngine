@@ -3,6 +3,8 @@ package fr.doryamy.rpgengine.dialogue;
 import fr.doryamy.rpgengine.action.ActionManager;
 import fr.doryamy.rpgengine.dialogue.runtime.view.DialogueChoiceView;
 import fr.doryamy.rpgengine.dialogue.runtime.view.DialogueInteractionType;
+import fr.doryamy.rpgengine.dialogue.runtime.view.DialogueParticipantType;
+import fr.doryamy.rpgengine.dialogue.runtime.view.DialogueParticipantView;
 import fr.doryamy.rpgengine.dialogue.runtime.view.DialoguePresenter;
 import fr.doryamy.rpgengine.dialogue.runtime.view.DialogueView;
 import fr.doryamy.rpgengine.trigger.TriggerContext;
@@ -431,13 +433,19 @@ public final class DialogueRunner {
 
         session.waitForContinue();
 
+        DialogueParticipantView participant =
+                participantView(
+                        reply.speaker()
+                );
+
         presenter.show(
                 session.context()
                         .getPlayer(),
                 new DialogueView(
-                        speakerLabel(
-                                reply.speaker()
+                        List.of(
+                                participant
                         ),
+                        participant.key(),
                         reply.text(),
                         DialogueInteractionType.CONTINUE,
                         List.of()
@@ -497,11 +505,19 @@ public final class DialogueRunner {
             );
         }
 
+        DialogueParticipantView participant =
+                participantView(
+                        DialogueReplySpeaker.PLAYER
+                );
+
         presenter.show(
                 session.context()
                         .getPlayer(),
                 new DialogueView(
-                        null,
+                        List.of(
+                                participant
+                        ),
+                        participant.key(),
                         null,
                         DialogueInteractionType.CHOICE,
                         views
@@ -587,19 +603,34 @@ public final class DialogueRunner {
     }
 
     /**
-     * Convertit le type métier du locuteur
-     * en libellé de présentation.
+     * Projette le type métier du locuteur vers un participant
+     * du modèle de présentation runtime.
      *
-     * <p>Aucune logique métier ne doit jamais
-     * être déduite de ce libellé.
+     * <p>Les clés "player" et "npc" représentent les deux rôles
+     * actuellement connus par le domaine. Le contrat de présentation
+     * accepte déjà plusieurs participants distincts ; une future
+     * identité de PNJ pourra donc fournir des clés spécifiques sans
+     * modifier DialogueView.
      */
-    private String speakerLabel(
+    private DialogueParticipantView participantView(
             DialogueReplySpeaker speaker
     ) {
 
         return switch (speaker) {
-            case NPC -> "PNJ";
-            case PLAYER -> "Joueur";
+
+            case NPC ->
+                    new DialogueParticipantView(
+                            "npc",
+                            DialogueParticipantType.NPC,
+                            "PNJ"
+                    );
+
+            case PLAYER ->
+                    new DialogueParticipantView(
+                            "player",
+                            DialogueParticipantType.PLAYER,
+                            "Joueur"
+                    );
         };
     }
 }

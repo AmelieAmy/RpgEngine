@@ -397,6 +397,14 @@ public final class RpgEngine extends JavaPlugin {
                 dialogueEditorController::deleteElement
         );
 
+        neoForgeBridge.setDialogueAddChoiceRequestHandler(
+                dialogueEditorController::addChoice
+        );
+
+        neoForgeBridge.setDialogueRuleDeleteRequestHandler(
+                dialogueEditorController::deleteRule
+        );
+
         /*
          * ====================================================
          * Dialogue Runtime
