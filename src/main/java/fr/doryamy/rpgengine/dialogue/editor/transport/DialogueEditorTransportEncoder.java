@@ -31,7 +31,7 @@ import java.util.Objects;
  */
 public final class DialogueEditorTransportEncoder {
 
-    public static final int PROTOCOL_VERSION = 4;
+    public static final int PROTOCOL_VERSION = 5;
 
     private final Gson gson =
             new GsonBuilder()
@@ -221,6 +221,20 @@ public final class DialogueEditorTransportEncoder {
                 "text",
                 reply.text()
         );
+
+        if (reply.characterProfileKey() != null) {
+            json.addProperty(
+                    "characterProfileKey",
+                    reply.characterProfileKey()
+            );
+        }
+
+        if (reply.characterDisplayName() != null) {
+            json.addProperty(
+                    "characterDisplayName",
+                    reply.characterDisplayName()
+            );
+        }
 
         json.add(
                 "conditions",

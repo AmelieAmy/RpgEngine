@@ -14,6 +14,7 @@ import fr.doryamy.rpgengine.command.RpgCommand;
 import fr.doryamy.rpgengine.command.dialogue.CreateDialogueCommand;
 import fr.doryamy.rpgengine.command.dialogue.OpenDialogueAdminCommand;
 import fr.doryamy.rpgengine.command.dialogue.OpenDialogueEditorCommand;
+import fr.doryamy.rpgengine.command.character.OpenCharacterAdminCommand;
 import fr.doryamy.rpgengine.condition.ConditionManager;
 import fr.doryamy.rpgengine.condition.expression.ExpressionEvaluator;
 import fr.doryamy.rpgengine.condition.expression.ExpressionParser;
@@ -21,18 +22,19 @@ import fr.doryamy.rpgengine.condition.providers.PlayerConditionProvider;
 import fr.doryamy.rpgengine.condition.providers.QuestConditionProvider;
 import fr.doryamy.rpgengine.database.DatabaseManager;
 import fr.doryamy.rpgengine.dialogue.*;
-import fr.doryamy.rpgengine.dialogue.editor.DialogueAdminService;
-import fr.doryamy.rpgengine.dialogue.editor.DialogueCreationService;
-import fr.doryamy.rpgengine.dialogue.editor.DialogueDeletionService;
-import fr.doryamy.rpgengine.dialogue.editor.DialogueEditorController;
-import fr.doryamy.rpgengine.dialogue.editor.DialogueNamingService;
-import fr.doryamy.rpgengine.dialogue.editor.DialogueTriggerPresentationService;
+import fr.doryamy.rpgengine.dialogue.editor.*;
+import fr.doryamy.rpgengine.dialogue.character.CharacterAdminController;
+import fr.doryamy.rpgengine.dialogue.character.CharacterAdminService;
+import fr.doryamy.rpgengine.dialogue.character.view.CharacterAdminViewMapper;
+import fr.doryamy.rpgengine.dialogue.character.portrait.CharacterPortraitAssetService;
+import fr.doryamy.rpgengine.dialogue.character.portrait.FileSystemCharacterPortraitAssetStore;
 import fr.doryamy.rpgengine.dialogue.editor.selection.DialogueAdminNpcSelectionListener;
 import fr.doryamy.rpgengine.dialogue.editor.selection.DialogueAdminNpcSelectionService;
 import fr.doryamy.rpgengine.dialogue.editor.view.DialogueAdminViewMapper;
 import fr.doryamy.rpgengine.dialogue.editor.view.DialogueEditorViewMapper;
 import fr.doryamy.rpgengine.dialogue.runtime.view.DialoguePresenter;
 import fr.doryamy.rpgengine.infrastructure.persistence.sqlite.dialogue.SqliteDialogueRepository;
+import fr.doryamy.rpgengine.infrastructure.persistence.sqlite.dialogue.SqliteDialogueCharacterProfileRepository;
 import fr.doryamy.rpgengine.listener.NPCListener;
 import fr.doryamy.rpgengine.npc.NpcService;
 import fr.doryamy.rpgengine.npc.citizens.CitizensNpcService;
@@ -116,6 +118,11 @@ public final class RpgEngine extends JavaPlugin {
 
         DialogueRepository dialogueRepository =
                 new SqliteDialogueRepository(
+                        connection
+                );
+
+        DialogueCharacterProfileRepository characterProfileRepository =
+                new SqliteDialogueCharacterProfileRepository(
                         connection
                 );
 
@@ -230,6 +237,40 @@ public final class RpgEngine extends JavaPlugin {
         DialogueKeyGenerator dialogueKeyGenerator =
                 new UuidDialogueKeyGenerator();
 
+        DialogueCharacterProfileKeyGenerator characterProfileKeyGenerator =
+                new UuidDialogueCharacterProfileKeyGenerator();
+
+        DialogueCharacterProfileService characterProfileService =
+                new DialogueCharacterProfileService(
+                        characterProfileRepository,
+                        characterProfileKeyGenerator
+                );
+
+        CharacterPortraitAssetService characterPortraitAssetService =
+                new CharacterPortraitAssetService(
+                        new FileSystemCharacterPortraitAssetStore(
+                                getDataFolder()
+                                        .toPath()
+                                        .resolve("assets")
+                                        .resolve("portraits")
+                        )
+                );
+
+        try {
+            characterPortraitAssetService.cleanupUnreferenced(
+                    characterProfileService.findAll()
+            );
+        } catch (RuntimeException e) {
+            RpgLogger.error(
+                    "Impossible de nettoyer les portraits orphelins : "
+                            + e.getMessage()
+            );
+        }
+
+        neoForgeBridge.setDialoguePortraitLoader(
+                characterPortraitAssetService::loadManagedPortrait
+        );
+
         /*
          * Structure du graphe.
          */
@@ -288,7 +329,9 @@ public final class RpgEngine extends JavaPlugin {
          */
 
         DialogueEditorViewMapper dialogueEditorViewMapper =
-                new DialogueEditorViewMapper();
+                new DialogueEditorViewMapper(
+                        characterProfileService
+                );
 
         DialogueAdminViewMapper dialogueAdminViewMapper =
                 new DialogueAdminViewMapper();
@@ -309,13 +352,42 @@ public final class RpgEngine extends JavaPlugin {
                         dialogueAdminViewMapper
                 );
 
+        CharacterAdminService characterAdminService =
+                new CharacterAdminService(
+                        characterProfileService,
+                        new CharacterAdminViewMapper(npcService)
+                );
+
         DialogueAdminNpcSelectionService npcSelectionService =
                 new DialogueAdminNpcSelectionService();
+
+        CharacterAdminController characterAdminController =
+                new CharacterAdminController(
+                        characterProfileService,
+                        characterAdminService,
+                        npcSelectionService,
+                        characterPortraitAssetService,
+                        neoForgeBridge
+                );
 
         DialogueCreationService dialogueCreationService =
                 new DialogueCreationService(
                         dialogueService,
                         triggerService
+                );
+
+        DialogueReplyParticipantInitializationService replyParticipantInitializationService =
+                new DialogueReplyParticipantInitializationService(
+                        dialogueService,
+                        characterProfileService,
+                        triggerQueryService,
+                        npcService
+                );
+
+        DialogueReplyEditingService dialogueReplyEditingService =
+                new DialogueReplyEditingService(
+                        dialogueService,
+                        characterProfileService
                 );
 
         DialogueDeletionService dialogueDeletionService =
@@ -336,6 +408,8 @@ public final class RpgEngine extends JavaPlugin {
                         dialogueDeletionService,
                         dialogueNamingService,
                         dialogueEditingService,
+                        replyParticipantInitializationService,
+                        dialogueReplyEditingService,
                         dialogueEditorViewMapper,
                         dialogueAdminService,
                         dialogueTriggerPresentationService,
@@ -393,6 +467,10 @@ public final class RpgEngine extends JavaPlugin {
                 dialogueEditorController::updateElementText
         );
 
+        neoForgeBridge.setDialogueNpcReplyUpdateRequestHandler(
+                dialogueEditorController::updateNpcReply
+        );
+
         neoForgeBridge.setDialogueElementDeleteRequestHandler(
                 dialogueEditorController::deleteElement
         );
@@ -403,6 +481,30 @@ public final class RpgEngine extends JavaPlugin {
 
         neoForgeBridge.setDialogueRuleDeleteRequestHandler(
                 dialogueEditorController::deleteRule
+        );
+
+        neoForgeBridge.setCharacterAdminRequestHandler(
+                characterAdminController::openAdmin
+        );
+
+        neoForgeBridge.setCharacterCreateRequestHandler(
+                characterAdminController::createCharacter
+        );
+
+        neoForgeBridge.setCharacterUpdateRequestHandler(
+                characterAdminController::updateCharacter
+        );
+
+        neoForgeBridge.setCharacterDeleteRequestHandler(
+                characterAdminController::deleteCharacter
+        );
+
+        neoForgeBridge.setCharacterNpcSelectionRequestHandler(
+                characterAdminController::beginNpcSelection
+        );
+
+        neoForgeBridge.setCharacterPortraitUploadRequestHandler(
+                characterAdminController::uploadPortrait
         );
 
         /*
@@ -430,7 +532,8 @@ public final class RpgEngine extends JavaPlugin {
                         dialogueNavigator,
                         dialogueSessionManager,
                         actionManager,
-                        dialoguePresenter
+                        dialoguePresenter,
+                        characterProfileService
                 );
 
         /*
@@ -479,7 +582,8 @@ public final class RpgEngine extends JavaPlugin {
         CommandManager commandManager =
                 createCommandManager(
                         dialogueEditorController,
-                        dialogueAdminService
+                        dialogueAdminService,
+                        characterAdminController
                 );
 
         registerCommands(
@@ -497,7 +601,8 @@ public final class RpgEngine extends JavaPlugin {
                 .registerEvents(
                         new DialogueAdminNpcSelectionListener(
                                 npcSelectionService,
-                                dialogueEditorController
+                                dialogueEditorController,
+                                characterAdminController
                         ),
                         this
                 );
@@ -611,7 +716,8 @@ public final class RpgEngine extends JavaPlugin {
      */
     private CommandManager createCommandManager(
             DialogueEditorController dialogueEditorController,
-            DialogueAdminService dialogueAdminService
+            DialogueAdminService dialogueAdminService,
+            CharacterAdminController characterAdminController
     ) {
 
         CommandManager commandManager =
@@ -633,6 +739,12 @@ public final class RpgEngine extends JavaPlugin {
         commandManager.register(
                 new OpenDialogueEditorCommand(
                         dialogueEditorController
+                )
+        );
+
+        commandManager.register(
+                new OpenCharacterAdminCommand(
+                        characterAdminController
                 )
         );
 

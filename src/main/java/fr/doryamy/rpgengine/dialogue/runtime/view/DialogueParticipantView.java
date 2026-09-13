@@ -6,13 +6,16 @@ import java.util.Objects;
  * Participant visible dans l'état courant d'un dialogue.
  *
  * <p>La clé constitue l'identité stable du participant dans
- * la scène de présentation. Le type décrit son rôle visuel et
- * le nom correspond uniquement au libellé présenté au joueur.
+ * la scène de présentation. Le type décrit son rôle visuel,
+ * le nom correspond uniquement au libellé présenté au joueur
+ * et portraitResource référence éventuellement un asset logique
+ * géré par RPGEngine.
  */
 public record DialogueParticipantView(
         String key,
         DialogueParticipantType type,
-        String displayName
+        String displayName,
+        String portraitResource
 ) {
 
     public DialogueParticipantView {
@@ -33,6 +36,13 @@ public record DialogueParticipantView(
                         displayName,
                         "displayName"
                 ).trim();
+
+        if (portraitResource != null) {
+            portraitResource = portraitResource.trim();
+            if (portraitResource.isEmpty()) {
+                portraitResource = null;
+            }
+        }
 
         if (key.isEmpty()) {
             throw new IllegalArgumentException(

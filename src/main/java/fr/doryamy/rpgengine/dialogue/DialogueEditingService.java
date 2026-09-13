@@ -64,7 +64,7 @@ public final class DialogueEditingService {
     public Dialogue insertReply(
             DialogueKey dialogueKey,
             DialogueInsertionPoint insertionPoint,
-            DialogueReplySpeaker speaker,
+            DialogueParticipantKey participantKey,
             String text
     ) {
 
@@ -74,8 +74,8 @@ public final class DialogueEditingService {
         );
 
         Objects.requireNonNull(
-                speaker,
-                "speaker"
+                participantKey,
+                "participantKey"
         );
 
         return mutateGraph(
@@ -84,7 +84,7 @@ public final class DialogueEditingService {
                         graphService.insertReply(
                                 graph,
                                 insertionPoint,
-                                speaker,
+                                participantKey,
                                 text
                         )
         );

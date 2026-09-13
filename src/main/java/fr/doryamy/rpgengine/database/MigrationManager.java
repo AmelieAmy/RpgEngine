@@ -31,7 +31,12 @@ public final class MigrationManager {
                 new V11_PlayerReplySequence(),
                 new V12_TerminalDialogueTransitions(),
                 new V13_StructuralDialogueNodes(),
-                new V14_DialogueGraphSystem()
+                new V14_DialogueGraphSystem(),
+                new V15_DialogueParticipants(),
+                new V16_DialogueReplyParticipants(),
+                new V17_CharacterProfileTrigger(),
+                new V18_CharacterProfileCitizensNpc(),
+                new V19_RebindLegacyDialogueNpcParticipants()
         );
     }
 

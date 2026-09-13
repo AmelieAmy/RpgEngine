@@ -7,6 +7,10 @@ import fr.doryamy.rpgengine.dialogue.DialogueChoice;
 import fr.doryamy.rpgengine.dialogue.DialogueConditionEntry;
 import fr.doryamy.rpgengine.dialogue.DialogueElement;
 import fr.doryamy.rpgengine.dialogue.DialogueEnd;
+import fr.doryamy.rpgengine.dialogue.DialogueCharacterProfile;
+import fr.doryamy.rpgengine.dialogue.DialogueCharacterProfileService;
+import fr.doryamy.rpgengine.dialogue.DialogueParticipant;
+import fr.doryamy.rpgengine.dialogue.DialogueParticipantType;
 import fr.doryamy.rpgengine.dialogue.DialogueLink;
 import fr.doryamy.rpgengine.dialogue.DialogueReply;
 import fr.doryamy.rpgengine.dialogue.DialogueStart;
@@ -18,6 +22,17 @@ import java.util.Objects;
 
 /** Transforme le domaine Dialogue en projection destinée à l'administration. */
 public final class DialogueEditorViewMapper {
+
+    private final DialogueCharacterProfileService characterProfileService;
+
+    public DialogueEditorViewMapper(
+            DialogueCharacterProfileService characterProfileService
+    ) {
+        this.characterProfileService = Objects.requireNonNull(
+                characterProfileService,
+                "characterProfileService"
+        );
+    }
 
     public DialogueEditorView present(Dialogue dialogue) {
         return present(dialogue, List.of(), List.of());
@@ -43,7 +58,7 @@ public final class DialogueEditorViewMapper {
                 .elements()
                 .values()
                 .stream()
-                .map(element -> presentElement(element, dialogue.rules()))
+                .map(element -> presentElement(element, dialogue))
                 .toList();
 
         List<DialogueEditorLinkView> links = dialogue.graph()
@@ -82,21 +97,17 @@ public final class DialogueEditorViewMapper {
 
     private DialogueEditorElementView presentElement(
             DialogueElement element,
-            fr.doryamy.rpgengine.dialogue.DialogueRules dialogueRules
+            Dialogue dialogue
     ) {
+        fr.doryamy.rpgengine.dialogue.DialogueRules dialogueRules =
+                dialogue.rules();
         return switch (element) {
             case DialogueStart start -> new DialogueEditorStartView(
                     start.key().value(),
                     presentConditions(dialogueRules.conditions()),
                     presentActions(dialogueRules.actions())
             );
-            case DialogueReply reply -> new DialogueEditorReplyView(
-                    reply.key().value(),
-                    reply.speaker().name(),
-                    reply.text(),
-                    presentConditions(reply.rules().conditions()),
-                    presentActions(reply.rules().actions())
-            );
+            case DialogueReply reply -> presentReply(reply, dialogue);
             case DialogueBranch branch -> new DialogueEditorBranchView(branch.key().value());
             case DialogueChoice choice -> new DialogueEditorChoiceView(
                     choice.key().value(),
@@ -107,6 +118,35 @@ public final class DialogueEditorViewMapper {
             );
             case DialogueEnd end -> new DialogueEditorEndView(end.key().value());
         };
+    }
+
+    private DialogueEditorReplyView presentReply(
+            DialogueReply reply,
+            Dialogue dialogue
+    ) {
+        DialogueParticipant participant =
+                dialogue.participants().require(reply.participantKey());
+
+        String characterProfileKey = null;
+        String characterDisplayName = null;
+
+        if (participant.type() == DialogueParticipantType.NPC) {
+            DialogueCharacterProfile profile =
+                    characterProfileService.require(participant.characterProfileKey());
+
+            characterProfileKey = profile.key().value();
+            characterDisplayName = profile.displayName();
+        }
+
+        return new DialogueEditorReplyView(
+                reply.key().value(),
+                participant.type().name(),
+                reply.text(),
+                characterProfileKey,
+                characterDisplayName,
+                presentConditions(reply.rules().conditions()),
+                presentActions(reply.rules().actions())
+        );
     }
 
     private DialogueEditorLinkView presentLink(DialogueLink link) {

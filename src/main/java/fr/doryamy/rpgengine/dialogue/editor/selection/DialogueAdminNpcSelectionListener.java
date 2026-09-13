@@ -1,5 +1,6 @@
 package fr.doryamy.rpgengine.dialogue.editor.selection;
 
+import fr.doryamy.rpgengine.dialogue.character.CharacterAdminController;
 import fr.doryamy.rpgengine.dialogue.editor.DialogueEditorController;
 import net.citizensnpcs.api.event.NPCRightClickEvent;
 import org.bukkit.event.EventHandler;
@@ -16,13 +17,16 @@ public final class DialogueAdminNpcSelectionListener implements Listener {
 
     private final DialogueAdminNpcSelectionService selectionService;
     private final DialogueEditorController dialogueEditorController;
+    private final CharacterAdminController characterAdminController;
 
     public DialogueAdminNpcSelectionListener(
             DialogueAdminNpcSelectionService selectionService,
-            DialogueEditorController dialogueEditorController
+            DialogueEditorController dialogueEditorController,
+            CharacterAdminController characterAdminController
     ) {
         this.selectionService = Objects.requireNonNull(selectionService, "selectionService");
         this.dialogueEditorController = Objects.requireNonNull(dialogueEditorController, "dialogueEditorController");
+        this.characterAdminController = Objects.requireNonNull(characterAdminController, "characterAdminController");
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -53,6 +57,20 @@ public final class DialogueAdminNpcSelectionListener implements Listener {
                             playerUuid,
                             edit.dialogueKey(),
                             completion.selection().npcId()
+                    );
+
+            case CharacterNpcSelectionIntent ignored ->
+                    characterAdminController.completeNpcSelection(
+                            playerUuid,
+                            completion.selection().npcId(),
+                            completion.selection().npcName()
+                    );
+
+            case CharacterTriggerNpcSelectionIntent ignored ->
+                    characterAdminController.completeNpcSelection(
+                            playerUuid,
+                            completion.selection().npcId(),
+                            completion.selection().npcName()
                     );
         }
     }

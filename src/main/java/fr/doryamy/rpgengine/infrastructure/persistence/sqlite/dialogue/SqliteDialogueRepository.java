@@ -168,6 +168,11 @@ public final class SqliteDialogueRepository
                             dialogue
                     );
 
+            insertParticipants(
+                    dialogueId,
+                    dialogue.participants()
+            );
+
             insertGraph(
                     dialogueId,
                     dialogue
@@ -198,16 +203,21 @@ public final class SqliteDialogueRepository
             );
 
             /*
-             * Le graphe persistant est remplacé
-             * comme une seule unité.
-             *
-             * La suppression des éléments entraîne
-             * automatiquement la suppression des liens,
-             * conditions et actions grâce aux FK
-             * ON DELETE CASCADE.
+             * Les Reply référencent désormais les participants.
+             * Le graphe doit donc être supprimé avant de remplacer
+             * la déclaration des participants.
              */
             deleteGraphElements(
                     dialogueId
+            );
+
+            deleteParticipants(
+                    dialogueId
+            );
+
+            insertParticipants(
+                    dialogueId,
+                    dialogue.participants()
             );
 
             insertGraph(
@@ -317,10 +327,16 @@ public final class SqliteDialogueRepository
                         links
                 );
 
+        DialogueParticipants participants =
+                loadParticipants(
+                        dialogueId
+                );
+
         return new Dialogue(
                 dialogueKey,
                 name,
                 loaded.startRules(),
+                participants,
                 graph
         );
     }
@@ -335,15 +351,17 @@ public final class SqliteDialogueRepository
 
         String sql = """
                 SELECT
-                    id,
-                    key,
-                    type,
-                    speaker,
-                    text,
-                    position
-                FROM dialogue_graph_element
-                WHERE dialogue_id = ?
-                ORDER BY id
+                    e.id,
+                    e.key,
+                    e.type,
+                    p.key AS participant_key,
+                    e.text,
+                    e.position
+                FROM dialogue_graph_element e
+                LEFT JOIN dialogue_participant p
+                    ON p.id = e.participant_id
+                WHERE e.dialogue_id = ?
+                ORDER BY e.id
                 """;
 
         List<DialogueElement> elements =
@@ -453,38 +471,25 @@ public final class SqliteDialogueRepository
                     );
 
             case "REPLY" -> {
-
-                String speakerValue =
+                String participantKeyValue =
                         result.getString(
-                                "speaker"
+                                "participant_key"
                         );
 
-                DialogueReplySpeaker speaker;
-
-                try {
-
-                    speaker =
-                            DialogueReplySpeaker.valueOf(
-                                    speakerValue
-                            );
-
-                } catch (
-                        IllegalArgumentException
-                        | NullPointerException e
-                ) {
-
+                if (participantKeyValue == null
+                        || participantKeyValue.isBlank()) {
                     throw new SQLException(
-                            "Speaker invalide pour l'élément "
+                            "Participant absent pour la réplique "
                                     + key
-                                    + " : "
-                                    + speakerValue,
-                            e
+                                    + "."
                     );
                 }
 
                 yield new DialogueReply(
                         key,
-                        speaker,
+                        new DialogueParticipantKey(
+                                participantKeyValue
+                        ),
                         result.getString(
                                 "text"
                         ),
@@ -770,6 +775,76 @@ public final class SqliteDialogueRepository
         return links;
     }
 
+    private DialogueParticipants loadParticipants(
+            long dialogueId
+    ) throws SQLException {
+
+        String sql = """
+                SELECT
+                    p.key AS participant_key,
+                    p.type AS participant_type,
+                    cp.key AS profile_key
+                FROM dialogue_participant p
+                LEFT JOIN dialogue_character_profile cp
+                    ON cp.id = p.character_profile_id
+                WHERE p.dialogue_id = ?
+                ORDER BY p.id
+                """;
+
+        List<DialogueParticipant> participants =
+                new ArrayList<>();
+
+        try (
+                PreparedStatement statement =
+                        connection.prepareStatement(sql)
+        ) {
+            statement.setLong(1, dialogueId);
+
+            try (ResultSet result = statement.executeQuery()) {
+                while (result.next()) {
+                    DialogueParticipantType type;
+
+                    try {
+                        type = DialogueParticipantType.valueOf(
+                                result.getString("participant_type")
+                        );
+                    } catch (IllegalArgumentException
+                             | NullPointerException e) {
+                        throw new SQLException(
+                                "Type de participant invalide pour "
+                                        + "le dialogue " + dialogueId + ".",
+                                e
+                        );
+                    }
+
+                    String profileValue =
+                            result.getString("profile_key");
+
+                    DialogueCharacterProfileKey profileKey =
+                            profileValue == null
+                                    ? null
+                                    : new DialogueCharacterProfileKey(
+                                    profileValue
+                            );
+
+                    participants.add(
+                            new DialogueParticipant(
+                                    new DialogueParticipantKey(
+                                            result.getString(
+                                                    "participant_key"
+                                            )
+                                    ),
+                                    type,
+                                    profileKey
+                            )
+                    );
+                }
+            }
+        }
+
+        return new DialogueParticipants(participants);
+    }
+
     /*
      * ====================================================
      * ECRITURE
@@ -871,6 +946,93 @@ public final class SqliteDialogueRepository
         }
     }
 
+    private void insertParticipants(
+            long dialogueId,
+            DialogueParticipants participants
+    ) throws SQLException {
+
+        String sql = """
+                INSERT INTO dialogue_participant (
+                    dialogue_id,
+                    key,
+                    type,
+                    character_profile_id
+                )
+                VALUES (
+                    ?,
+                    ?,
+                    ?,
+                    (
+                        SELECT id
+                        FROM dialogue_character_profile
+                        WHERE key = ?
+                    )
+                )
+                """;
+
+        try (
+                PreparedStatement statement =
+                        connection.prepareStatement(sql)
+        ) {
+            for (DialogueParticipant participant :
+                    participants.values()) {
+
+                statement.setLong(
+                        1,
+                        dialogueId
+                );
+
+                statement.setString(
+                        2,
+                        participant.key().value()
+                );
+
+                statement.setString(
+                        3,
+                        participant.type().name()
+                );
+
+                if (participant.characterProfileKey() == null) {
+                    statement.setNull(
+                            4,
+                            Types.VARCHAR
+                    );
+                } else {
+                    statement.setString(
+                            4,
+                            participant.characterProfileKey().value()
+                    );
+                }
+
+                statement.addBatch();
+            }
+
+            statement.executeBatch();
+        }
+    }
+
+    private void deleteParticipants(
+            long dialogueId
+    ) throws SQLException {
+
+        String sql = """
+                DELETE FROM dialogue_participant
+                WHERE dialogue_id = ?
+                """;
+
+        try (
+                PreparedStatement statement =
+                        connection.prepareStatement(sql)
+        ) {
+            statement.setLong(
+                    1,
+                    dialogueId
+            );
+
+            statement.executeUpdate();
+        }
+    }
+
     private void insertGraph(
             long dialogueId,
             Dialogue dialogue
@@ -915,11 +1077,23 @@ public final class SqliteDialogueRepository
                     dialogue_id,
                     key,
                     type,
-                    speaker,
+                    participant_id,
                     text,
                     position
                 )
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (
+                    ?,
+                    ?,
+                    ?,
+                    (
+                        SELECT id
+                        FROM dialogue_participant
+                        WHERE dialogue_id = ?
+                          AND key = ?
+                    ),
+                    ?,
+                    ?
+                )
                 """;
 
         Map<DialogueElementKey, Long>
@@ -951,6 +1125,7 @@ public final class SqliteDialogueRepository
 
                 bindElement(
                         statement,
+                        dialogueId,
                         element
                 );
 
@@ -986,6 +1161,7 @@ public final class SqliteDialogueRepository
 
     private void bindElement(
             PreparedStatement statement,
+            long dialogueId,
             DialogueElement element
     ) throws SQLException {
 
@@ -993,141 +1169,63 @@ public final class SqliteDialogueRepository
          * Colonnes :
          *
          * 3 = type
-         * 4 = speaker
-         * 5 = text
-         * 6 = position
+         * 4 = dialogue_id utilisé pour résoudre participant_id
+         * 5 = participant key
+         * 6 = text
+         * 7 = position
          */
 
+        statement.setLong(
+                4,
+                dialogueId
+        );
+
         if (element instanceof DialogueStart) {
-
-            statement.setString(
-                    3,
-                    "START"
-            );
-
-            statement.setNull(
-                    4,
-                    Types.VARCHAR
-            );
-
-            statement.setNull(
-                    5,
-                    Types.VARCHAR
-            );
-
-            statement.setNull(
-                    6,
-                    Types.INTEGER
-            );
-
+            statement.setString(3, "START");
+            statement.setNull(5, Types.VARCHAR);
+            statement.setNull(6, Types.VARCHAR);
+            statement.setNull(7, Types.INTEGER);
             return;
         }
 
         if (element instanceof DialogueReply reply) {
-
-            statement.setString(
-                    3,
-                    "REPLY"
-            );
-
-            statement.setString(
-                    4,
-                    reply.speaker()
-                            .name()
-            );
-
+            statement.setString(3, "REPLY");
             statement.setString(
                     5,
-                    reply.text()
+                    reply.participantKey().value()
             );
-
-            statement.setNull(
-                    6,
-                    Types.INTEGER
-            );
-
+            statement.setString(6, reply.text());
+            statement.setNull(7, Types.INTEGER);
             return;
         }
 
         if (element instanceof DialogueBranch) {
-
-            statement.setString(
-                    3,
-                    "BRANCH"
-            );
-
-            statement.setNull(
-                    4,
-                    Types.VARCHAR
-            );
-
-            statement.setNull(
-                    5,
-                    Types.VARCHAR
-            );
-
-            statement.setNull(
-                    6,
-                    Types.INTEGER
-            );
-
+            statement.setString(3, "BRANCH");
+            statement.setNull(5, Types.VARCHAR);
+            statement.setNull(6, Types.VARCHAR);
+            statement.setNull(7, Types.INTEGER);
             return;
         }
 
         if (element instanceof DialogueChoice choice) {
-
-            statement.setString(
-                    3,
-                    "CHOICE"
-            );
-
-            statement.setNull(
-                    4,
-                    Types.VARCHAR
-            );
-
-            statement.setString(
-                    5,
-                    choice.text()
-            );
-
-            statement.setInt(
-                    6,
-                    choice.position()
-            );
-
+            statement.setString(3, "CHOICE");
+            statement.setNull(5, Types.VARCHAR);
+            statement.setString(6, choice.text());
+            statement.setInt(7, choice.position());
             return;
         }
 
         if (element instanceof DialogueEnd) {
-
-            statement.setString(
-                    3,
-                    "END"
-            );
-
-            statement.setNull(
-                    4,
-                    Types.VARCHAR
-            );
-
-            statement.setNull(
-                    5,
-                    Types.VARCHAR
-            );
-
-            statement.setNull(
-                    6,
-                    Types.INTEGER
-            );
-
+            statement.setString(3, "END");
+            statement.setNull(5, Types.VARCHAR);
+            statement.setNull(6, Types.VARCHAR);
+            statement.setNull(7, Types.INTEGER);
             return;
         }
 
         throw new SQLException(
-                "Type d'élément non supporté : "
-                        + element.getClass()
-                        .getName()
+                "Type d'élément de dialogue non persistable : "
+                        + element.getClass().getName()
         );
     }
 

@@ -3,6 +3,7 @@ package fr.doryamy.rpgengine.trigger;
 import fr.doryamy.rpgengine.dialogue.DialogueKey;
 import fr.doryamy.rpgengine.model.Action;
 import fr.doryamy.rpgengine.model.Trigger;
+import fr.doryamy.rpgengine.model.TriggerType;
 import fr.doryamy.rpgengine.repository.TriggerRepository;
 
 import java.util.List;
@@ -27,6 +28,13 @@ public final class TriggerQueryService {
 
     public List<Trigger> findAll() {
         return List.copyOf(triggerRepository.findAll());
+    }
+
+    /** Recherche les triggers actifs correspondant exactement à un type et une cible. */
+    public List<Trigger> find(TriggerType type, String targetId) {
+        Objects.requireNonNull(type, "type");
+        Objects.requireNonNull(targetId, "targetId");
+        return List.copyOf(triggerRepository.find(type, targetId));
     }
 
     public List<Trigger> findDialogTriggers(DialogueKey dialogueKey) {

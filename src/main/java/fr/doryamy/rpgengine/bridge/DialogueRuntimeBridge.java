@@ -12,6 +12,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * Bridge spécialisé dans le runtime des dialogues.
@@ -38,6 +39,9 @@ import java.util.function.Consumer;
  */
 public final class DialogueRuntimeBridge {
 
+    private static final int PORTRAIT_CHUNK_BYTES = 24 * 1024;
+    private static final int MAX_PORTRAIT_BYTES = 4 * 1024 * 1024;
+
     /*
      * ====================================================
      * Serveur -> client
@@ -46,6 +50,8 @@ public final class DialogueRuntimeBridge {
 
     private Method showDialogueMethod;
     private Method dismissDialogueMethod;
+    private Method showDialoguePortraitChunkMethod;
+    private Method showDialoguePortraitUnavailableMethod;
 
     /*
      * ====================================================
@@ -54,7 +60,9 @@ public final class DialogueRuntimeBridge {
      */
 
     private Method clearDialogueContinueHandlerMethod;
+    private Method clearDialogueCancelHandlerMethod;
     private Method clearDialogueChoiceHandlerMethod;
+    private Method clearDialoguePortraitRequestHandlerMethod;
 
     /*
      * ====================================================
@@ -63,6 +71,7 @@ public final class DialogueRuntimeBridge {
      */
 
     private DialogueRunner dialogueRunner;
+    private Function<String, byte[]> dialoguePortraitLoader;
 
     /**
      * Initialise le bridge runtime et enregistre
@@ -99,6 +108,17 @@ public final class DialogueRuntimeBridge {
                         "clearDialogueContinueHandler"
                 );
 
+        Method registerCancelMethod =
+                bridgeClass.getMethod(
+                        "registerDialogueCancelHandler",
+                        Consumer.class
+                );
+
+        clearDialogueCancelHandlerMethod =
+                bridgeClass.getMethod(
+                        "clearDialogueCancelHandler"
+                );
+
         /*
          * ------------------------------------------------
          * Client -> serveur : CHOICE
@@ -119,6 +139,35 @@ public final class DialogueRuntimeBridge {
                         "clearDialogueChoiceHandler"
                 );
 
+        Method registerPortraitRequestMethod =
+                bridgeClass.getMethod(
+                        "registerDialoguePortraitRequestHandler",
+                        BiConsumer.class
+                );
+
+        clearDialoguePortraitRequestHandlerMethod =
+                bridgeClass.getMethod(
+                        "clearDialoguePortraitRequestHandler"
+                );
+
+        showDialoguePortraitChunkMethod =
+                bridgeClass.getMethod(
+                        "showDialoguePortraitChunk",
+                        UUID.class,
+                        String.class,
+                        int.class,
+                        int.class,
+                        byte[].class
+                );
+
+        showDialoguePortraitUnavailableMethod =
+                bridgeClass.getMethod(
+                        "showDialoguePortraitUnavailable",
+                        UUID.class,
+                        String.class,
+                        String.class
+                );
+
         /*
          * ------------------------------------------------
          * Serveur -> client
@@ -135,6 +184,7 @@ public final class DialogueRuntimeBridge {
                 bridgeClass.getMethod(
                         "showDialogue",
                         UUID.class,
+                        String[].class,
                         String[].class,
                         String[].class,
                         String[].class,
@@ -161,17 +211,33 @@ public final class DialogueRuntimeBridge {
         Consumer<UUID> continueCallback =
                 this::handleDialogueContinue;
 
+        Consumer<UUID> cancelCallback =
+                this::handleDialogueCancel;
+
         BiConsumer<UUID, String> choiceCallback =
                 this::handleDialogueChoice;
+
+        BiConsumer<UUID, String> portraitRequestCallback =
+                this::handleDialoguePortraitRequest;
 
         registerContinueMethod.invoke(
                 null,
                 continueCallback
         );
 
+        registerCancelMethod.invoke(
+                null,
+                cancelCallback
+        );
+
         registerChoiceMethod.invoke(
                 null,
                 choiceCallback
+        );
+
+        registerPortraitRequestMethod.invoke(
+                null,
+                portraitRequestCallback
         );
     }
 
@@ -186,6 +252,19 @@ public final class DialogueRuntimeBridge {
                 Objects.requireNonNull(
                         dialogueRunner,
                         "dialogueRunner"
+                );
+    }
+
+    /**
+     * Branche le chargeur d'assets portrait géré par le plugin.
+     */
+    public void setDialoguePortraitLoader(
+            Function<String, byte[]> dialoguePortraitLoader
+    ) {
+        this.dialoguePortraitLoader =
+                Objects.requireNonNull(
+                        dialoguePortraitLoader,
+                        "dialoguePortraitLoader"
                 );
     }
 
@@ -225,6 +304,9 @@ public final class DialogueRuntimeBridge {
         String[] participantDisplayNames =
                 new String[participantCount];
 
+        String[] participantPortraitResources =
+                new String[participantCount];
+
         for (int i = 0;
              i < participantCount;
              i++) {
@@ -242,6 +324,9 @@ public final class DialogueRuntimeBridge {
 
             participantDisplayNames[i] =
                     participant.displayName();
+
+            participantPortraitResources[i] =
+                    participant.portraitResource();
         }
 
         int size =
@@ -284,6 +369,7 @@ public final class DialogueRuntimeBridge {
                             participantKeys,
                             participantTypes,
                             participantDisplayNames,
+                            participantPortraitResources,
                             view.activeParticipantKey(),
                             view.text(),
                             view.interactionType()
@@ -343,6 +429,27 @@ public final class DialogueRuntimeBridge {
 
             return false;
         }
+    }
+
+    /**
+     * Traite l'abandon explicite provenant du client.
+     *
+     * <p>L'opération est volontairement idempotente : si le serveur a déjà
+     * terminé la session avant de fermer l'écran, le CANCEL tardif est ignoré.
+     */
+    private void handleDialogueCancel(
+            UUID playerUuid
+    ) {
+        if (dialogueRunner == null) {
+            RpgLogger.error(
+                    "CANCEL_DIALOGUE reçu mais DialogueRunner indisponible."
+            );
+            return;
+        }
+
+        dialogueRunner.cancel(
+                playerUuid
+        );
     }
 
     /**
@@ -443,6 +550,134 @@ public final class DialogueRuntimeBridge {
     }
 
     /**
+     * Charge puis transfère un portrait demandé par le client. Le découpage
+     * appartient au bridge et ne fuite donc pas dans le domaine Character.
+     */
+    private void handleDialoguePortraitRequest(
+            UUID playerUuid,
+            String portraitResource
+    ) {
+        if (dialoguePortraitLoader == null) {
+            sendPortraitUnavailable(
+                    playerUuid,
+                    portraitResource,
+                    "Le chargeur de portraits RPGEngine n'est pas disponible."
+            );
+            return;
+        }
+
+        try {
+            byte[] bytes =
+                    dialoguePortraitLoader.apply(
+                            portraitResource
+                    );
+
+            if (bytes == null || bytes.length == 0) {
+                throw new IllegalArgumentException(
+                        "Le portrait demandé est vide."
+                );
+            }
+
+            if (bytes.length > MAX_PORTRAIT_BYTES) {
+                throw new IllegalArgumentException(
+                        "Le portrait demandé dépasse la taille runtime autorisée."
+                );
+            }
+
+            int chunkCount =
+                    (bytes.length + PORTRAIT_CHUNK_BYTES - 1)
+                            / PORTRAIT_CHUNK_BYTES;
+
+            for (int chunkIndex = 0;
+                 chunkIndex < chunkCount;
+                 chunkIndex++) {
+
+                int offset =
+                        chunkIndex * PORTRAIT_CHUNK_BYTES;
+
+                int length =
+                        Math.min(
+                                PORTRAIT_CHUNK_BYTES,
+                                bytes.length - offset
+                        );
+
+                byte[] chunk =
+                        new byte[length];
+
+                System.arraycopy(
+                        bytes,
+                        offset,
+                        chunk,
+                        0,
+                        length
+                );
+
+                Object result =
+                        showDialoguePortraitChunkMethod.invoke(
+                                null,
+                                playerUuid,
+                                portraitResource,
+                                chunkIndex,
+                                chunkCount,
+                                chunk
+                        );
+
+                if (!(result instanceof Boolean success)
+                        || !success) {
+                    RpgLogger.error(
+                            "Impossible d'envoyer le chunk "
+                                    + chunkIndex
+                                    + "/"
+                                    + chunkCount
+                                    + " du portrait "
+                                    + portraitResource
+                                    + "."
+                    );
+                    return;
+                }
+            }
+
+        } catch (ReflectiveOperationException e) {
+            RpgLogger.error(
+                    "Impossible d'envoyer le portrait via NeoForge : "
+                            + e.getMessage()
+            );
+        } catch (RuntimeException e) {
+            sendPortraitUnavailable(
+                    playerUuid,
+                    portraitResource,
+                    e.getMessage() == null
+                            ? "Portrait indisponible."
+                            : e.getMessage()
+            );
+        }
+    }
+
+    private void sendPortraitUnavailable(
+            UUID playerUuid,
+            String portraitResource,
+            String message
+    ) {
+        if (showDialoguePortraitUnavailableMethod == null) {
+            return;
+        }
+
+        try {
+            showDialoguePortraitUnavailableMethod.invoke(
+                    null,
+                    playerUuid,
+                    portraitResource == null ? "" : portraitResource,
+                    message == null ? "Portrait indisponible." : message
+            );
+        } catch (ReflectiveOperationException e) {
+            RpgLogger.error(
+                    "Impossible de signaler un portrait indisponible via NeoForge : "
+                            + e.getMessage()
+            );
+        }
+    }
+
+    /**
      * Supprime les callbacks enregistrés
      * dans le mod et libère les références.
      */
@@ -454,17 +689,32 @@ public final class DialogueRuntimeBridge {
         );
 
         clearHandler(
+                clearDialogueCancelHandlerMethod,
+                "CANCEL"
+        );
+
+        clearHandler(
                 clearDialogueChoiceHandlerMethod,
                 "CHOICE"
         );
 
+        clearHandler(
+                clearDialoguePortraitRequestHandlerMethod,
+                "DIALOGUE_PORTRAIT_REQUEST"
+        );
+
         dialogueRunner = null;
+        dialoguePortraitLoader = null;
 
         showDialogueMethod = null;
         dismissDialogueMethod = null;
+        showDialoguePortraitChunkMethod = null;
+        showDialoguePortraitUnavailableMethod = null;
 
         clearDialogueContinueHandlerMethod = null;
+        clearDialogueCancelHandlerMethod = null;
         clearDialogueChoiceHandlerMethod = null;
+        clearDialoguePortraitRequestHandlerMethod = null;
     }
 
     private void clearHandler(

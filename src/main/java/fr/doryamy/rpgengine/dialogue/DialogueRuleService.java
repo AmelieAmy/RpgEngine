@@ -691,7 +691,7 @@ public final class DialogueRuleService {
             replacement =
                     new DialogueReply(
                             reply.key(),
-                            reply.speaker(),
+                            reply.participantKey(),
                             reply.text(),
                             rules
                     );

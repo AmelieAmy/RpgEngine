@@ -1,6 +1,8 @@
 package fr.doryamy.rpgengine.bridge;
 
 import fr.doryamy.rpgengine.dialogue.DialogueRunner;
+import fr.doryamy.rpgengine.dialogue.character.transport.CharacterAdminTransportEncoder;
+import fr.doryamy.rpgengine.dialogue.character.view.CharacterAdminView;
 import fr.doryamy.rpgengine.dialogue.editor.transport.DialogueAdminTransportEncoder;
 import fr.doryamy.rpgengine.dialogue.editor.transport.DialogueEditorTransportEncoder;
 import fr.doryamy.rpgengine.dialogue.editor.view.DialogueAdminView;
@@ -14,6 +16,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * Façade entre RPGEngine Plugin
@@ -35,6 +38,17 @@ public final class NeoForgeBridge {
                     new DialogueAdminTransportEncoder()
             );
 
+    private final CharacterAdminBridge characterAdminBridge =
+            new CharacterAdminBridge(
+                    new CharacterAdminTransportEncoder()
+            );
+
+    private final CharacterNpcSelectionBridge characterNpcSelectionBridge =
+            new CharacterNpcSelectionBridge();
+
+    private final CharacterPortraitBridge characterPortraitBridge =
+            new CharacterPortraitBridge();
+
     private final QuestBridge questBridge =
             new QuestBridge();
 
@@ -52,6 +66,19 @@ public final class NeoForgeBridge {
             );
 
             dialogueEditorBridge.initialize(
+                    bridgeClass
+            );
+
+            characterAdminBridge.initialize(
+                    bridgeClass
+            );
+
+
+            characterNpcSelectionBridge.initialize(
+                    bridgeClass
+            );
+
+            characterPortraitBridge.initialize(
                     bridgeClass
             );
 
@@ -116,6 +143,14 @@ public final class NeoForgeBridge {
 
         return dialogueRuntimeBridge.dismissDialogue(
                 playerUuid
+        );
+    }
+
+    public void setDialoguePortraitLoader(
+            Function<String, byte[]> loader
+    ) {
+        dialogueRuntimeBridge.setDialoguePortraitLoader(
+                loader
         );
     }
 
@@ -190,6 +225,12 @@ public final class NeoForgeBridge {
         dialogueEditorBridge.setDialogueElementTextUpdateRequestHandler(handler);
     }
 
+    public void setDialogueNpcReplyUpdateRequestHandler(
+            BiConsumer<UUID, Map<String, String>> handler
+    ) {
+        dialogueEditorBridge.setDialogueNpcReplyUpdateRequestHandler(handler);
+    }
+
     public void setDialogueElementDeleteRequestHandler(
             BiConsumer<UUID, Map<String, String>> handler
     ) {
@@ -245,6 +286,73 @@ public final class NeoForgeBridge {
         );
     }
 
+    public void setCharacterAdminRequestHandler(
+            Consumer<UUID> handler
+    ) {
+        characterAdminBridge.setAdminRequestHandler(handler);
+    }
+
+    public void setCharacterCreateRequestHandler(
+            BiConsumer<UUID, Map<String, String>> handler
+    ) {
+        characterAdminBridge.setCreateRequestHandler(handler);
+    }
+
+    public void setCharacterUpdateRequestHandler(
+            BiConsumer<UUID, Map<String, String>> handler
+    ) {
+        characterAdminBridge.setUpdateRequestHandler(handler);
+    }
+
+    public void setCharacterDeleteRequestHandler(
+            BiConsumer<UUID, String> handler
+    ) {
+        characterAdminBridge.setDeleteRequestHandler(handler);
+    }
+
+
+    public void setCharacterNpcSelectionRequestHandler(
+            Consumer<UUID> handler
+    ) {
+        characterNpcSelectionBridge.setSelectionRequestHandler(handler);
+    }
+
+    public boolean showCharacterNpcSelectionResult(
+            UUID playerUuid, String npcId, String npcName
+    ) {
+        return characterNpcSelectionBridge.showSelectionResult(playerUuid, npcId, npcName);
+    }
+
+    public boolean openCharacterAdmin(
+            UUID playerUuid,
+            CharacterAdminView view
+    ) {
+        return characterAdminBridge.openCharacterAdmin(
+                playerUuid,
+                view
+        );
+    }
+
+    public void setCharacterPortraitUploadRequestHandler(
+            BiConsumer<UUID, byte[]> handler
+    ) {
+        characterPortraitBridge.setUploadRequestHandler(handler);
+    }
+
+    public boolean showCharacterPortraitUploadResult(
+            UUID playerUuid,
+            boolean success,
+            String portraitResource,
+            String message
+    ) {
+        return characterPortraitBridge.showUploadResult(
+                playerUuid,
+                success,
+                portraitResource,
+                message
+        );
+    }
+
     public List<QuestSummary> getAvailableQuests() {
         return questBridge.getAvailableQuests();
     }
@@ -287,6 +395,9 @@ public final class NeoForgeBridge {
 
         dialogueRuntimeBridge.shutdown();
         dialogueEditorBridge.shutdown();
+        characterAdminBridge.shutdown();
+        characterNpcSelectionBridge.shutdown();
+        characterPortraitBridge.shutdown();
         questBridge.shutdown();
 
         RpgLogger.info(
@@ -298,6 +409,9 @@ public final class NeoForgeBridge {
 
         dialogueRuntimeBridge.shutdown();
         dialogueEditorBridge.shutdown();
+        characterAdminBridge.shutdown();
+        characterNpcSelectionBridge.shutdown();
+        characterPortraitBridge.shutdown();
         questBridge.shutdown();
     }
 }

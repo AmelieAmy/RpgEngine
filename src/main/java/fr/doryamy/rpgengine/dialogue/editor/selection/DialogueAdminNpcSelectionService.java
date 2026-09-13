@@ -34,6 +34,12 @@ public final class DialogueAdminNpcSelectionService {
         pendingSelections.put(uuid, new EditDialogueTriggerNpcSelectionIntent(dialogueKey));
     }
 
+    public void beginCharacterNpc(UUID playerUuid) {
+        UUID uuid = Objects.requireNonNull(playerUuid, "playerUuid");
+        creationSelections.remove(uuid);
+        pendingSelections.put(uuid, new CharacterNpcSelectionIntent());
+    }
+
     public boolean isSelecting(UUID playerUuid) {
         return pendingSelections.containsKey(Objects.requireNonNull(playerUuid, "playerUuid"));
     }

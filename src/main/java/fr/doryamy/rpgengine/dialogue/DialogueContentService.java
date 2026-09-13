@@ -95,7 +95,7 @@ public final class DialogueContentService {
         DialogueReply updated =
                 new DialogueReply(
                         reply.key(),
-                        reply.speaker(),
+                        reply.participantKey(),
                         text,
                         reply.rules()
                 );

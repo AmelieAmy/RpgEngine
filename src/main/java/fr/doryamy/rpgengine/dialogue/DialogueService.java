@@ -64,18 +64,29 @@ public final class DialogueService {
     public Dialogue create(
             String name
     ) {
+        return create(
+                name,
+                DialogueParticipants.empty()
+        );
+    }
+
+    /**
+     * Crée et persiste un dialogue avec ses participants initiaux.
+     */
+    public Dialogue create(
+            String name,
+            DialogueParticipants participants
+    ) {
+        Objects.requireNonNull(
+                participants,
+                "participants"
+        );
 
         DialogueKey key =
                 nextKey();
 
-        /*
-         * Une collision UUID est extrêmement improbable,
-         * mais l'invariant d'identité ne doit pas dépendre
-         * d'une probabilité.
-         */
         if (repository.findByKey(key)
                 .isPresent()) {
-
             throw new DialogueAlreadyExistsException(
                     key
             );
@@ -89,6 +100,7 @@ public final class DialogueService {
                         key,
                         name,
                         DialogueRules.empty(),
+                        participants,
                         graph
                 );
 
@@ -171,6 +183,7 @@ public final class DialogueService {
                         current.key(),
                         name,
                         current.rules(),
+                        current.participants(),
                         current.graph()
                 );
 
@@ -213,6 +226,7 @@ public final class DialogueService {
                         current.key(),
                         current.name(),
                         current.rules(),
+                        current.participants(),
                         graph
                 );
 
@@ -253,6 +267,7 @@ public final class DialogueService {
                         current.key(),
                         current.name(),
                         rules,
+                        current.participants(),
                         current.graph()
                 );
 
@@ -266,6 +281,45 @@ public final class DialogueService {
 
         return updated;
     }
+    /**
+     * Remplace la déclaration des participants sans modifier
+     * le graphe ni les règles du dialogue.
+     */
+    public Dialogue replaceParticipants(
+            DialogueKey key,
+            DialogueParticipants participants
+    ) {
+
+        Objects.requireNonNull(
+                participants,
+                "participants"
+        );
+
+        Dialogue current =
+                require(
+                        key
+                );
+
+        Dialogue updated =
+                new Dialogue(
+                        current.key(),
+                        current.name(),
+                        current.rules(),
+                        participants,
+                        current.graph()
+                );
+
+        requireValid(
+                updated
+        );
+
+        repository.update(
+                updated
+        );
+
+        return updated;
+    }
+
     /**
      * Supprime définitivement un dialogue.
      */

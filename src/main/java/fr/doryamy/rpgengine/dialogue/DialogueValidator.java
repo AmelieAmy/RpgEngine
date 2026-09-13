@@ -31,9 +31,91 @@ public final class DialogueValidator {
             );
         }
 
-        return validate(
-                dialogue.graph()
+        DialogueValidationResult graphResult =
+                validate(
+                        dialogue.graph()
+                );
+
+        List<String> errors =
+                new ArrayList<>(
+                        graphResult.errors()
+                );
+
+        validateParticipants(
+                dialogue,
+                errors
         );
+
+        if (errors.isEmpty()) {
+            return DialogueValidationResult.valid();
+        }
+
+        return DialogueValidationResult.invalid(
+                errors
+        );
+    }
+
+    private void validateParticipants(
+            Dialogue dialogue,
+            List<String> errors
+    ) {
+        Map<DialogueParticipantKey, DialogueParticipant> participants =
+                new HashMap<>();
+
+        for (DialogueParticipant participant :
+                dialogue.participants().values()) {
+            participants.put(
+                    participant.key(),
+                    participant
+            );
+        }
+
+        long playerCount =
+                dialogue.participants()
+                        .values()
+                        .stream()
+                        .filter(participant ->
+                                participant.type()
+                                        == DialogueParticipantType.PLAYER
+                        )
+                        .count();
+
+        boolean hasBranch =
+                dialogue.graph()
+                        .elements()
+                        .values()
+                        .stream()
+                        .anyMatch(DialogueBranch.class::isInstance);
+
+        if (hasBranch && playerCount != 1) {
+            errors.add(
+                    "Un dialogue contenant un embranchement doit déclarer "
+                            + "exactement un participant PLAYER. Trouvés : "
+                            + playerCount + "."
+            );
+        }
+
+        for (DialogueElement element :
+                dialogue.graph().elements().values()) {
+            if (!(element instanceof DialogueReply reply)) {
+                continue;
+            }
+
+            DialogueParticipant participant =
+                    participants.get(
+                            reply.participantKey()
+                    );
+
+            if (participant == null) {
+                errors.add(
+                        "La réplique "
+                                + reply.key()
+                                + " référence le participant inexistant "
+                                + reply.participantKey()
+                                + "."
+                );
+            }
+        }
     }
 
     public DialogueValidationResult validate(

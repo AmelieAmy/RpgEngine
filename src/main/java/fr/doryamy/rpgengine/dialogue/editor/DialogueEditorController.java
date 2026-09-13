@@ -6,7 +6,8 @@ import fr.doryamy.rpgengine.dialogue.DialogueKey;
 import fr.doryamy.rpgengine.dialogue.DialogueElementKey;
 import fr.doryamy.rpgengine.dialogue.DialogueRuleKey;
 import fr.doryamy.rpgengine.dialogue.DialogueInsertionPoint;
-import fr.doryamy.rpgengine.dialogue.DialogueReplySpeaker;
+import fr.doryamy.rpgengine.dialogue.DialogueParticipant;
+import fr.doryamy.rpgengine.dialogue.DialogueParticipantType;
 import fr.doryamy.rpgengine.dialogue.DialogueEditingService;
 import fr.doryamy.rpgengine.dialogue.DialogueService;
 import fr.doryamy.rpgengine.dialogue.editor.selection.DialogueAdminNpcSelectionService;
@@ -36,6 +37,8 @@ public final class DialogueEditorController {
     private final DialogueDeletionService dialogueDeletionService;
     private final DialogueNamingService dialogueNamingService;
     private final DialogueEditingService dialogueEditingService;
+    private final DialogueReplyParticipantInitializationService replyParticipantInitializationService;
+    private final DialogueReplyEditingService replyEditingService;
     private final DialogueEditorViewMapper editorViewMapper;
     private final DialogueAdminService dialogueAdminService;
     private final DialogueTriggerPresentationService triggerPresentationService;
@@ -51,6 +54,8 @@ public final class DialogueEditorController {
             DialogueDeletionService dialogueDeletionService,
             DialogueNamingService dialogueNamingService,
             DialogueEditingService dialogueEditingService,
+            DialogueReplyParticipantInitializationService replyParticipantInitializationService,
+            DialogueReplyEditingService replyEditingService,
             DialogueEditorViewMapper editorViewMapper,
             DialogueAdminService dialogueAdminService,
             DialogueTriggerPresentationService triggerPresentationService,
@@ -65,6 +70,14 @@ public final class DialogueEditorController {
         this.dialogueDeletionService = Objects.requireNonNull(dialogueDeletionService, "dialogueDeletionService");
         this.dialogueNamingService = Objects.requireNonNull(dialogueNamingService, "dialogueNamingService");
         this.dialogueEditingService = Objects.requireNonNull(dialogueEditingService, "dialogueEditingService");
+        this.replyParticipantInitializationService = Objects.requireNonNull(
+                replyParticipantInitializationService,
+                "replyParticipantInitializationService"
+        );
+        this.replyEditingService = Objects.requireNonNull(
+                replyEditingService,
+                "replyEditingService"
+        );
         this.editorViewMapper = Objects.requireNonNull(editorViewMapper, "editorViewMapper");
         this.dialogueAdminService = Objects.requireNonNull(dialogueAdminService, "dialogueAdminService");
         this.triggerPresentationService = Objects.requireNonNull(triggerPresentationService, "triggerPresentationService");
@@ -161,7 +174,10 @@ public final class DialogueEditorController {
             return;
         }
 
-        dialogueCreationService.createNpcDialogue(normalizedName, npcSelection.npcId());
+        dialogueCreationService.createNpcDialogue(
+                normalizedName,
+                npcSelection.npcId()
+        );
         npcSelectionService.clearSelection(playerUuid);
 
         DialogueAdminView adminView = dialogueAdminService.present();
@@ -266,6 +282,14 @@ public final class DialogueEditorController {
         List<Integer> triggerIds = triggers.stream().map(Trigger::getId).toList();
         if (!triggerService.updateTargets(triggerIds, TriggerType.NPC, npcId)) {
             RpgLogger.error("Impossible de modifier les triggers NPC du dialogue " + dialogueKey);
+            return;
+        }
+
+        try {
+            replyParticipantInitializationService.rebindDefaultNpcParticipant(dialogueKey, npcId);
+        } catch (RuntimeException e) {
+            RpgLogger.error("Les triggers du dialogue " + dialogueKey
+                    + " ont été modifiés mais la réaffectation du participant NPC a échoué : " + e.getMessage());
             return;
         }
 
@@ -464,6 +488,44 @@ public final class DialogueEditorController {
         }
     }
 
+    /** Modifie le texte et le personnage explicitement associés à une Reply PNJ. */
+    public void updateNpcReply(
+            UUID playerUuid,
+            Map<String, String> request
+    ) {
+        Objects.requireNonNull(playerUuid, "playerUuid");
+        Objects.requireNonNull(request, "request");
+
+        try {
+            DialogueKey dialogueKey =
+                    new DialogueKey(requireRequest(request, "dialogueKey"));
+            DialogueElementKey replyKey =
+                    new DialogueElementKey(requireRequest(request, "replyKey"));
+            fr.doryamy.rpgengine.dialogue.DialogueCharacterProfileKey profileKey =
+                    new fr.doryamy.rpgengine.dialogue.DialogueCharacterProfileKey(
+                            requireRequest(request, "characterProfileKey")
+                    );
+            String text = requireRequest(request, "text");
+
+            replyEditingService.updateNpcReply(
+                    dialogueKey,
+                    replyKey,
+                    profileKey,
+                    text
+            );
+
+            openEditor(playerUuid, dialogueKey);
+
+        } catch (RuntimeException e) {
+            RpgLogger.error(
+                    "REQUEST_UPDATE_DIALOGUE_NPC_REPLY refusé pour le joueur "
+                            + playerUuid
+                            + " : "
+                            + e.getMessage()
+            );
+        }
+    }
+
     /** Supprime un élément administrable puis renvoie immédiatement l'éditeur actualisé. */
     public void deleteElement(
             UUID playerUuid,
@@ -514,14 +576,56 @@ public final class DialogueEditorController {
 
             switch (elementType) {
                 case "REPLY" -> {
-                    DialogueReplySpeaker speaker = DialogueReplySpeaker.valueOf(
-                            requireRequest(request, "speaker").toUpperCase()
-                    );
+                    DialogueParticipantType participantType =
+                            DialogueParticipantType.valueOf(
+                                    requireRequest(request, "speaker")
+                                            .toUpperCase()
+                            );
+
+                    DialogueParticipant participant;
+
+                    if (participantType == DialogueParticipantType.NPC) {
+                        participant =
+                                replyParticipantInitializationService
+                                        .resolveDefaultNpcParticipant(
+                                                dialogueKey
+                                        );
+                    } else {
+                        Dialogue dialogue =
+                                dialogueService.require(
+                                        dialogueKey
+                                );
+
+                        List<DialogueParticipant> matchingParticipants =
+                                dialogue.participants()
+                                        .values()
+                                        .stream()
+                                        .filter(candidate ->
+                                                candidate.type()
+                                                        == participantType
+                                        )
+                                        .toList();
+
+                        if (matchingParticipants.size() != 1) {
+                            throw new IllegalArgumentException(
+                                    "L'insertion d'une réplique "
+                                            + participantType
+                                            + " exige exactement un participant "
+                                            + "de ce type. Trouvés : "
+                                            + matchingParticipants.size()
+                                            + "."
+                            );
+                        }
+
+                        participant = matchingParticipants.get(0);
+                    }
+
                     String text = requireRequest(request, "text");
+
                     dialogueEditingService.insertReply(
                             dialogueKey,
                             insertionPoint,
-                            speaker,
+                            participant.key(),
                             text
                     );
                 }

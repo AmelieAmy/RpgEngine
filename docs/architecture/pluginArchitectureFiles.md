@@ -26,11 +26,17 @@ src
                         ActionExecutor.java
                         ActionManager.java
                     bridge
+                        CharacterAdminBridge.java
+                        CharacterNpcSelectionBridge.java
+                        CharacterPortraitBridge.java
+                        CharacterTriggerSelectionBridge.java
                         DialogueRuntimeBridge.java
                         NeoForgeBridge.java
                         NeoForgeDialoguePresenter.java
                         QuestBridge.java
                     command
+                        character
+                            OpenCharacterAdminCommand.java
                         dialogue
                             CreateDialogueCommand.java
                             OpenDialogueAdminCommand.java
@@ -67,11 +73,31 @@ src
                             V12_TerminalDialogueTransitions.java
                             V13_StructuralDialogueNodes.java
                             V14_NpcReplyRules.java
+                            V15_DialogueParticipants.java
+                            V16_DialogueReplyParticipants.java
+                            V17_CharacterProfileTrigger.java
+                            V18_CharacterProfileCitizensNpc.java
                         DatabaseManager.java
                         MigrationManager.java
                     dialogue
+                        character
+                            portrait
+                                CharacterPortraitAssetService.java
+                                CharacterPortraitAssetStore.java
+                                FileSystemCharacterPortraitAssetStore.java
+                            transport
+                                CharacterAdminTransportEncoder.java
+                            view
+                                CharacterAdminEntryView.java
+                                CharacterAdminTriggerView.java
+                                CharacterAdminView.java
+                                CharacterAdminViewMapper.java
+                            CharacterAdminController.java
+                            CharacterAdminService.java
                         editor
                             selection
+                                CharacterNpcSelectionIntent.java
+                                CharacterTriggerNpcSelectionIntent.java
                                 CreateDialogueNpcSelectionIntent.java
                                 DialogueAdminNpcSelectionListener.java
                                 DialogueAdminNpcSelectionService.java
@@ -105,6 +131,8 @@ src
                             DialogueDeletionService.java
                             DialogueEditorController.java
                             DialogueNamingService.java
+                            DialogueReplyEditingService.java
+                            DialogueReplyParticipantInitializationService.java
                             DialogueTriggerPresentation.java
                             DialogueTriggerPresentationService.java
                         runtime
@@ -137,7 +165,6 @@ src
                         DialogueNotFoundException.java
                         DialoguePersistenceException.java
                         DialogueReply.java
-                        DialogueReplySpeaker.java
                         DialogueRules.java
                         DialogueRuleKey.java
                         DialogueRuleKeyGenerator.java

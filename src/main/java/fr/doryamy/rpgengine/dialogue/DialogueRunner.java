@@ -29,13 +29,15 @@ public final class DialogueRunner {
     private final DialogueSessionManager sessionManager;
     private final ActionManager actionManager;
     private final DialoguePresenter presenter;
+    private final DialogueCharacterProfileService characterProfileService;
 
     public DialogueRunner(
             DialogueValidator validator,
             DialogueNavigator navigator,
             DialogueSessionManager sessionManager,
             ActionManager actionManager,
-            DialoguePresenter presenter
+            DialoguePresenter presenter,
+            DialogueCharacterProfileService characterProfileService
     ) {
 
         this.validator =
@@ -66,6 +68,12 @@ public final class DialogueRunner {
                 Objects.requireNonNull(
                         presenter,
                         "presenter"
+                );
+
+        this.characterProfileService =
+                Objects.requireNonNull(
+                        characterProfileService,
+                        "characterProfileService"
                 );
     }
 
@@ -247,6 +255,27 @@ public final class DialogueRunner {
 
         processUntilInteraction(
                 session
+        );
+    }
+
+    /**
+     * Abandonne la session active à la demande du client.
+     *
+     * <p>Contrairement à close(UUID), cette opération ne renvoie pas de
+     * fermeture d'écran : le client vient précisément de fermer son écran.
+     * Elle est idempotente afin d'accepter sans erreur un CANCEL tardif après
+     * une terminaison normale décidée par le serveur.
+     */
+    public void cancel(
+            UUID playerUuid
+    ) {
+        Objects.requireNonNull(
+                playerUuid,
+                "playerUuid"
+        );
+
+        sessionManager.remove(
+                playerUuid
         );
     }
 
@@ -435,16 +464,15 @@ public final class DialogueRunner {
 
         DialogueParticipantView participant =
                 participantView(
-                        reply.speaker()
+                        session,
+                        reply.participantKey()
                 );
 
         presenter.show(
                 session.context()
                         .getPlayer(),
                 new DialogueView(
-                        List.of(
-                                participant
-                        ),
+                        participantViews(session),
                         participant.key(),
                         reply.text(),
                         DialogueInteractionType.CONTINUE,
@@ -505,18 +533,23 @@ public final class DialogueRunner {
             );
         }
 
+        DialogueParticipant playerParticipant =
+                requireUniqueParticipant(
+                        session.dialogue(),
+                        fr.doryamy.rpgengine.dialogue.DialogueParticipantType.PLAYER
+                );
+
         DialogueParticipantView participant =
                 participantView(
-                        DialogueReplySpeaker.PLAYER
+                        session,
+                        playerParticipant.key()
                 );
 
         presenter.show(
                 session.context()
                         .getPlayer(),
                 new DialogueView(
-                        List.of(
-                                participant
-                        ),
+                        participantViews(session),
                         participant.key(),
                         null,
                         DialogueInteractionType.CHOICE,
@@ -603,34 +636,93 @@ public final class DialogueRunner {
     }
 
     /**
-     * Projette le type métier du locuteur vers un participant
-     * du modèle de présentation runtime.
-     *
-     * <p>Les clés "player" et "npc" représentent les deux rôles
-     * actuellement connus par le domaine. Le contrat de présentation
-     * accepte déjà plusieurs participants distincts ; une future
-     * identité de PNJ pourra donc fournir des clés spécifiques sans
-     * modifier DialogueView.
+     * Construit la projection runtime depuis le participant explicitement
+     * référencé par le dialogue.
      */
     private DialogueParticipantView participantView(
-            DialogueReplySpeaker speaker
+            DialogueSession session,
+            DialogueParticipantKey participantKey
     ) {
+        DialogueParticipant participant =
+                session.dialogue()
+                        .participants()
+                        .require(
+                                participantKey
+                        );
 
-        return switch (speaker) {
-
-            case NPC ->
-                    new DialogueParticipantView(
-                            "npc",
-                            DialogueParticipantType.NPC,
-                            "PNJ"
-                    );
-
+        return switch (participant.type()) {
             case PLAYER ->
                     new DialogueParticipantView(
-                            "player",
+                            participant.key().value(),
                             DialogueParticipantType.PLAYER,
-                            "Joueur"
+                            session.context()
+                                    .getPlayer()
+                                    .getName(),
+                            null
                     );
+
+            case NPC -> {
+                DialogueCharacterProfile profile =
+                        characterProfileService.require(
+                                participant.characterProfileKey()
+                        );
+
+                yield new DialogueParticipantView(
+                        participant.key().value(),
+                        DialogueParticipantType.NPC,
+                        profile.displayName(),
+                        profile.portraitResource()
+                );
+            }
         };
+    }
+
+    /**
+     * Construit la scène visible complète. Les portraits sont ainsi présents
+     * indépendamment du participant actif et le client peut éclairer le bon
+     * côté sans réinterpréter le graphe.
+     */
+    private List<DialogueParticipantView> participantViews(
+            DialogueSession session
+    ) {
+        return session.dialogue()
+                .participants()
+                .values()
+                .stream()
+                .map(participant ->
+                        participantView(
+                                session,
+                                participant.key()
+                        )
+                )
+                .toList();
+    }
+
+    private DialogueParticipant requireUniqueParticipant(
+            Dialogue dialogue,
+            fr.doryamy.rpgengine.dialogue.DialogueParticipantType type
+    ) {
+        List<DialogueParticipant> matches =
+                dialogue.participants()
+                        .values()
+                        .stream()
+                        .filter(participant ->
+                                participant.type() == type
+                        )
+                        .toList();
+
+        if (matches.size() != 1) {
+            throw new IllegalStateException(
+                    "Le dialogue "
+                            + dialogue.key()
+                            + " doit déclarer exactement un participant "
+                            + type
+                            + ". Trouvés : "
+                            + matches.size()
+                            + "."
+            );
+        }
+
+        return matches.get(0);
     }
 }

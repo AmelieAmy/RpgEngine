@@ -92,7 +92,7 @@ public final class DialogueGraphService {
     public DialogueGraph insertReply(
             DialogueGraph graph,
             DialogueInsertionPoint insertionPoint,
-            DialogueReplySpeaker speaker,
+            DialogueParticipantKey participantKey,
             String text
     ) {
 
@@ -107,8 +107,8 @@ public final class DialogueGraphService {
         );
 
         Objects.requireNonNull(
-                speaker,
-                "speaker"
+                participantKey,
+                "participantKey"
         );
 
         requireValid(graph);
@@ -122,7 +122,7 @@ public final class DialogueGraphService {
         DialogueReply reply =
                 new DialogueReply(
                         nextKey(),
-                        speaker,
+                        participantKey,
                         text,
                         DialogueRules.empty()
                 );
