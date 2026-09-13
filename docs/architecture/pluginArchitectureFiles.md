@@ -30,6 +30,7 @@ src
                         CharacterNpcSelectionBridge.java
                         CharacterPortraitBridge.java
                         CharacterTriggerSelectionBridge.java
+                        DialogueEditorBridge.java
                         DialogueRuntimeBridge.java
                         NeoForgeBridge.java
                         NeoForgeDialoguePresenter.java
@@ -77,6 +78,7 @@ src
                             V16_DialogueReplyParticipants.java
                             V17_CharacterProfileTrigger.java
                             V18_CharacterProfileCitizensNpc.java
+                            V19_RebindLegacyDialogueNpcParticipants.java
                         DatabaseManager.java
                         MigrationManager.java
                     dialogue
@@ -147,6 +149,11 @@ src
                         DialogueActionEntry.java
                         DialogueAlreadyExistsException.java
                         DialogueBranch.java
+                        DialogueCharacterProfile.java
+                        DialogueCharacterProfileKey.java
+                        DialogueCharacterProfileKeyGenerator.java
+                        DialogueCharacterProfileRepository.java
+                        DialogueCharacterProfileService.java
                         DialogueChoice.java
                         DialogueConditionEntry.java
                         DialogueContentService.java
@@ -163,11 +170,16 @@ src
                         DialogueLink.java
                         DialogueNavigator.java
                         DialogueNotFoundException.java
+                        DialogueParticipant.java
+                        DialogueParticipantKey.java
+                        DialogueParticipants.java
+                        DialogueParticipantType.java
                         DialoguePersistenceException.java
                         DialogueReply.java
-                        DialogueRules.java
+                        DialogueRepository.java
                         DialogueRuleKey.java
                         DialogueRuleKeyGenerator.java
+                        DialogueRules.java
                         DialogueRuleService.java
                         DialogueRunner.java
                         DialogueService.java
@@ -177,6 +189,7 @@ src
                         DialogueStart.java
                         DialogueValidationResult.java
                         DialogueValidator.java
+                        UuidDialogueCharacterProfileKeyGenerator.java
                         UuidDialogueElementKeyGenerator.java
                         UuidDialogueKeyGenerator.java
                         UuidDialogueRuleKeyGenerator.java
@@ -184,6 +197,7 @@ src
                         persistence 
                             sqlite
                                 dialogue
+                                    SqliteDialogueCharacterProfileRepository.java
                                     SqliteDialogueRepository.java
                     listener
                         NPCListener.java
@@ -199,6 +213,7 @@ src
                     quest
                         ftb
                             FtbQuestService.java
+                        QuestActionOperation.java
                         QuestService.java
                         QuestState.java
                         QuestSummary.java
@@ -210,6 +225,7 @@ src
                     trigger
                         TriggerContext.java
                         TriggerManager.java
+                        TriggerQueryService.java
                         TriggerService.java
                     util
                         RpgLogger.java

@@ -12,6 +12,8 @@ Le moteur ne déduit jamais la structure d'un dialogue. Il exécute uniquement c
 
 Toute ambiguïté est considérée comme une erreur de conception.
 
+A l'image d'un projet web, le mod serait le front-end tandis que le plugin joue le role du back-end.
+
 ---
 
 ## Principe fondamental
